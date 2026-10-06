@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Script manuel ``outils/sbg_ha_export.py`` : copie du code partagé, modes hors ligne, client WebSocket."""
 from __future__ import annotations
 

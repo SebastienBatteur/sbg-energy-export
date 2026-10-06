@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Boutons « Exporter » (5 min si l'option est choisie, quart d'heure, heure)."""
 from __future__ import annotations
 

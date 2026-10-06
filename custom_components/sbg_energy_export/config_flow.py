@@ -1,13 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
 """Configuration par l'interface : quels appareils, leur catégorie, et le stockage local
-(durée de conservation, pas de 5 minutes)."""
+(durée de conservation, pas de 5 minutes).
+
+L'écran de sélection classe les appareils par intérêt pour l'analyse (gros
+consommateurs et pilotables, puis cuisson et lavage, puis consommation de fond),
+dit pourquoi en une phrase, et coche par défaut les recommandés ; la catégorie
+est proposée par des règles déterministes (``categories.py``).
+"""
 from __future__ import annotations
 
-import re
+import logging
+import time
 from typing import Any
 
 from homeassistant.components.energy.data import async_get_manager
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -20,7 +29,8 @@ from homeassistant.helpers.selector import (
 )
 import voluptuous as vol
 
-from .collecteur import a_des_sources
+from .categories import PRIORITE, deviner_categorie, libelle, recommande
+from .collecteur import a_des_sources, async_statistiques
 from .const import (
     CHOIX_AUCUN,
     CHOIX_SELECTION,
@@ -34,24 +44,10 @@ from .const import (
     OPT_CINQ_MINUTES,
     OPT_CONSERVATION,
 )
-from .sbg_format import CATEGORIES, appareils_du_tableau
+from .sbg_format import CATEGORIES, appareils_du_tableau, variations
 
-# Devine une catégorie d'après le nom (FR, NL, EN, DE) ; l'utilisateur corrige.
-INDICES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("voiture", ("voiture", "borne", "wallbox", "charger", "chargeur", "laadpaal", "ev", "car", "tesla", "zoe")),
-    ("pac", ("pac", "pompe a chaleur", "pompe à chaleur", "heat pump", "heatpump", "warmtepomp", "wärmepumpe", "airco", "clim")),
-    ("ballon", ("ballon", "boiler", "chauffe-eau", "chauffe eau", "water heater", "ecs", "warmwater", "sanitaire")),
-    ("cuisson", ("four", "oven", "cuisson", "cuisini", "induction", "kookplaat", "plaque", "cooking", "hob", "micro")),
-)
-
-
-def deviner_categorie(nom: str) -> str:
-    """Catégorie proposée par défaut d'après le nom de l'appareil."""
-    n = " " + " ".join(re.findall(r"\w+", nom.casefold())) + " "
-    for categorie, mots in INDICES:
-        if any(f" {m}" in n for m in mots):  # début de mot
-            return categorie
-    return "autre"
+_LOGGER = logging.getLogger(__name__)
+JOURS_PUISSANCE = 30  # période regardée pour la puissance typique
 
 
 def _nom(hass: HomeAssistant, appareil: dict[str, Any]) -> str:
@@ -68,11 +64,46 @@ class _Etapes:
     hass: HomeAssistant
     _options: dict[str, Any]
     _appareils: list[dict[str, Any]]
+    _proposees: dict[str, str]
 
     async def _charger(self) -> dict[str, Any] | None:
         prefs = (await async_get_manager(self.hass)).data
-        self._appareils = appareils_du_tableau(prefs) if prefs else []
+        appareils = appareils_du_tableau(prefs) if prefs else []
+        self._proposees = await self._categories_proposees(appareils)
+        # du plus utile pour l'analyse au moins utile, puis par nom
+        self._appareils = sorted(appareils, key=lambda a: (
+            PRIORITE.get(self._categorie(a["stat_consumption"]), 4), _nom(self.hass, a).casefold()))
         return prefs  # type: ignore[return-value]
+
+    async def _categories_proposees(self, appareils: list[dict[str, Any]]) -> dict[str, str]:
+        """Nom, appareil Home Assistant (nom, modèle, fabricant), puis puissance typique."""
+        ids = {a["stat_consumption"] for a in appareils}
+        maxi: dict[str, float] = {}
+        if ids:
+            fin = int(time.time()) // 3600 * 3600
+            try:
+                lignes = await async_statistiques(self.hass, ids, fin - JOURS_PUISSANCE * 86400, fin, "hour")
+                for s, l in lignes.items():
+                    v = variations(l, 3600)
+                    if v:
+                        maxi[s] = max(v.values())
+            except Exception:  # noqa: BLE001 - une proposition ne doit jamais bloquer l'écran
+                _LOGGER.debug("Puissance typique indisponible", exc_info=True)
+        entites, appareils_ha = er.async_get(self.hass), dr.async_get(self.hass)
+        sortie: dict[str, str] = {}
+        for a in appareils:
+            stat = a["stat_consumption"]
+            textes: list[str | None] = []
+            entite = entites.async_get(stat)
+            appareil = appareils_ha.async_get(entite.device_id) if entite and entite.device_id else None
+            if appareil:
+                textes = [getattr(appareil, c, None) for c in ("name_by_user", "name", "model", "manufacturer")]
+            sortie[stat] = deviner_categorie(_nom(self.hass, a), *textes, kwh_h_max=maxi.get(stat))
+        return sortie
+
+    def _categorie(self, stat: str) -> str:
+        """Catégorie déjà choisie, sinon proposée."""
+        return self._options.get(OPT_CATEGORIES, {}).get(stat) or self._proposees.get(stat, "autre")
 
     def _formulaire_choix(self, etape: str) -> ConfigFlowResult:
         defaut = self._options.get(OPT_CHOIX, CHOIX_TOUS if self._appareils else CHOIX_AUCUN)
@@ -105,13 +136,18 @@ class _Etapes:
         return self._terminer()  # type: ignore[attr-defined]
 
     def _formulaire_selection(self) -> ConfigFlowResult:
+        defaut = list(self._options.get(OPT_APPAREILS, [])) or [
+            a["stat_consumption"] for a in self._appareils if recommande(self._categorie(a["stat_consumption"]))]
+        langue = self.hass.config.language
         return self.async_show_form(  # type: ignore[attr-defined]
             step_id="selection",
             data_schema=vol.Schema({
-                vol.Required(OPT_APPAREILS, default=list(self._options.get(OPT_APPAREILS, []))): SelectSelector(
+                vol.Required(OPT_APPAREILS, default=defaut): SelectSelector(
                     SelectSelectorConfig(
-                        options=[SelectOptionDict(value=a["stat_consumption"], label=_nom(self.hass, a))
-                                 for a in self._appareils],
+                        options=[SelectOptionDict(
+                            value=a["stat_consumption"],
+                            label=libelle(_nom(self.hass, a), self._categorie(a["stat_consumption"]), langue))
+                            for a in self._appareils],
                         multiple=True, mode=SelectSelectorMode.LIST)),
             }),
         )
@@ -123,7 +159,7 @@ class _Etapes:
             stat = a["stat_consumption"]
             if stat not in self._options.get(OPT_APPAREILS, []):
                 continue
-            defaut = anciennes.get(stat) or deviner_categorie(_nom(self.hass, a))
+            defaut = anciennes.get(stat) or self._proposees.get(stat, "autre")
             schema[vol.Required(stat, default=defaut)] = SelectSelector(SelectSelectorConfig(
                 options=list(CATEGORIES), translation_key="categorie", mode=SelectSelectorMode.DROPDOWN))
         return self.async_show_form(step_id="categories", data_schema=vol.Schema(schema))  # type: ignore[attr-defined]
@@ -137,6 +173,7 @@ class SbgConfigFlow(_Etapes, ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
         self._appareils: list[dict[str, Any]] = []
+        self._proposees: dict[str, str] = {}
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choix : tous les appareils, aucun, ou une sélection."""
@@ -181,6 +218,7 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
         self._appareils: list[dict[str, Any]] = []
+        self._proposees: dict[str, str] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choix : tous, aucun, ou une sélection."""

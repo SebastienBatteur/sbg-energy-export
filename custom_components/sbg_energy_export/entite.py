@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Appareil de service commun aux entités."""
 from __future__ import annotations
 

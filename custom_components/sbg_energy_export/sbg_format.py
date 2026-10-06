@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Format « SBG HA export », version 1 : construction et écriture du fichier.
 
 Ce module est en Python pur (bibliothèque standard seulement) : il ne dépend pas
@@ -35,7 +36,10 @@ CONSO = "consommation_maison"
 ROLES: tuple[str, ...] = (PRELEVEMENT, INJECTION, SOLAIRE, CHARGE, DECHARGE)
 COLONNES_FIXES: tuple[str, ...] = (*ROLES, CONSO)
 
-CATEGORIES: tuple[str, ...] = ("voiture", "pac", "ballon", "cuisson", "autre")
+# Liste fermée. Les 5 premières existent depuis le début ; lavage, froid,
+# informatique et eclairage ajoutées le 06/10/2026 (extension compatible).
+CATEGORIES: tuple[str, ...] = ("voiture", "pac", "ballon", "cuisson", "lavage", "froid", "informatique",
+                               "eclairage", "autre")
 
 MESURE_5 = "mesure_5min"
 MESURE_15 = "mesure_15min"

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
 """sbg_ha_export.py : exporte les données du tableau Énergie de Home Assistant
 au format ouvert « SBG HA export » (CSV), pour le déposer soi-même sur
 analyse.sbg-energy.com.
@@ -14,7 +15,7 @@ Exemples :
     python sbg_ha_export.py --depuis-csv energy*.csv --appareil sensor.borne=voiture
 
 Fichier généré par outils/assembler_script.py : ne pas modifier à la main.
-Licence : voir LICENSE du dépôt sbg-ha-export.
+Licence : Apache-2.0 (voir LICENSE et NOTICE du dépôt sbg-energy-export).
 """
 from __future__ import annotations
 
@@ -37,7 +38,10 @@ CONSO = "consommation_maison"
 ROLES: tuple[str, ...] = (PRELEVEMENT, INJECTION, SOLAIRE, CHARGE, DECHARGE)
 COLONNES_FIXES: tuple[str, ...] = (*ROLES, CONSO)
 
-CATEGORIES: tuple[str, ...] = ("voiture", "pac", "ballon", "cuisson", "autre")
+# Liste fermée. Les 5 premières existent depuis le début ; lavage, froid,
+# informatique et eclairage ajoutées le 06/10/2026 (extension compatible).
+CATEGORIES: tuple[str, ...] = ("voiture", "pac", "ballon", "cuisson", "lavage", "froid", "informatique",
+                               "eclairage", "autre")
 
 MESURE_5 = "mesure_5min"
 MESURE_15 = "mesure_15min"
@@ -400,6 +404,7 @@ __all__ = [
     "variations_par_quart",
 ]
 # === CODE PARTAGE : fin ===
+# SPDX-License-Identifier: Apache-2.0
 
 # ======================================================================
 # Script : lecture des statistiques et écriture du fichier.
@@ -636,7 +641,8 @@ def principal(argv: list | None = None) -> int:
     p.add_argument("--role", action="append", default=[],
                    help="avec --depuis-json : prelevement=sensor.x (aussi injection, solaire, charge, decharge)")
     p.add_argument("--appareil", action="append", default=[],
-                   help="avec --depuis-json ou --depuis-csv : sensor.x=voiture (pac, ballon, cuisson, autre)")
+                   help="avec --depuis-json ou --depuis-csv : sensor.x=voiture "
+                        "(pac, ballon, cuisson, lavage, froid, informatique, eclairage, autre)")
     p.add_argument("--appareils", help="avec --url : tous, aucun, ou numéros 1,3")
     p.add_argument("--categorie", action="append", default=[], help="avec --url : 1=voiture")
     p.add_argument("--pas", type=int, choices=(5, 15, 60), default=60,

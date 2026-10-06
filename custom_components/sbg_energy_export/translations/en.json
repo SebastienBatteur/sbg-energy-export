@@ -16,14 +16,14 @@
       },
       "selection": {
         "title": "Selection",
-        "description": "Tick the devices to include.",
+        "description": "Devices are listed from the most to the least useful for the analysis: large and controllable loads (car, heat pump, hot water), then cooking and washing, then base load (cold, IT, lighting). Recommended ones are ticked; you remain free to choose.",
         "data": {
           "appareils": "Devices"
         }
       },
       "categories": {
         "title": "Categories",
-        "description": "Choose each device's category (suggested from its name)."
+        "description": "Choose each device's category (suggested from its name, its Home Assistant device and its typical power)."
       }
     },
     "abort": {
@@ -48,14 +48,14 @@
       },
       "selection": {
         "title": "Selection",
-        "description": "Tick the devices to include.",
+        "description": "Devices are listed from the most to the least useful for the analysis: large and controllable loads (car, heat pump, hot water), then cooking and washing, then base load (cold, IT, lighting). Recommended ones are ticked; you remain free to choose.",
         "data": {
           "appareils": "Devices"
         }
       },
       "categories": {
         "title": "Categories",
-        "description": "Choose each device's category (suggested from its name)."
+        "description": "Choose each device's category (suggested from its name, its Home Assistant device and its typical power)."
       }
     }
   },
@@ -69,10 +69,14 @@
     },
     "categorie": {
       "options": {
-        "voiture": "Electric car",
-        "pac": "Heat pump",
-        "ballon": "Water heater",
-        "cuisson": "Cooking",
+        "voiture": "Car / charger",
+        "pac": "Heat pump / heating",
+        "ballon": "Hot water",
+        "cuisson": "Cooking (oven, hob)",
+        "lavage": "Washing (washer, dryer, dishwasher)",
+        "froid": "Cold (fridge, freezer)",
+        "informatique": "IT and network",
+        "eclairage": "Lighting",
         "autre": "Other"
       }
     }

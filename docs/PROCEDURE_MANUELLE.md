@@ -1,29 +1,27 @@
 # Exporter vos données Home Assistant pour analyse.sbg-energy.com — procédure manuelle
 
+*Mise à jour du 06/10/2026 : le chemin « téléchargements du tableau Énergie par tranches de
+3 jours » est retiré (inutilisable : environ 120 téléchargements pour un an) ; l'export de
+l'intégration « Import Statistics » (klausj1) le remplace comme chemin sans jeton.*
+
 Pour qui : vous avez **Home Assistant** et son **tableau de bord Énergie** configuré (réseau, et
 peut-être panneaux, batterie, appareils suivis). Vous n'avez pas de compteur communicant, ou vous
 ne voulez pas ouvrir l'accès chez votre gestionnaire de réseau.
 
-Ce que vous obtenez : un fichier **« SBG HA export »** (CSV) que vous déposez **vous-même** sur
-analyse.sbg-energy.com. Rien n'est envoyé automatiquement, à personne.
+Ce que vous obtenez : un fichier que vous déposez **vous-même** sur
+<https://sbg-energy.com/donnees-compteur/> (service analyse.sbg-energy.com). Rien n'est envoyé
+automatiquement, à personne.
 
-Deux chemins, sans rien installer dans Home Assistant :
+Deux chemins, sans installer notre intégration :
 
-| | A. Téléchargements du tableau Énergie | B. Petit script avec un jeton |
+| | A. Intégration « Import Statistics » | B. Petit script avec un jeton |
 |---|---|---|
 | Jeton d'accès | aucun | un jeton que **vous** créez, et supprimez ensuite |
-| Travail | un téléchargement par tranche de 3 jours (≈ 120 pour un an) | une commande |
-| Résultat | l'heure, sur la période téléchargée | l'heure depuis le début, et le quart d'heure des ~10 derniers jours |
-| Il faut | Python 3.9 ou plus récent sur l'ordinateur | Python 3.9 ou plus récent sur l'ordinateur |
-
-Dans les deux cas, le script `sbg_ha_export.py` (un seul fichier, bibliothèque standard de
-Python seulement) fabrique le fichier final. Il ne parle qu'à **votre** Home Assistant (chemin B),
-ou à rien du tout (chemin A).
+| Il faut | HACS et l'intégration Import Statistics (gratuite, de klausj1) | Python 3.9 ou plus récent sur l'ordinateur, et le script `sbg_ha_export.py` |
+| Travail | un appel d'action dans Home Assistant, puis récupérer le fichier | une commande |
+| Résultat | l'heure, sur la période choisie (CSV ou TSV d'Import Statistics, déposé tel quel) | fichier « SBG HA export » : l'heure depuis le début, et le quart d'heure des ~10 derniers jours |
 
 > Les libellés de menus peuvent varier un peu selon la version de Home Assistant.
->
-> Python : sous Windows, depuis python.org ou le Microsoft Store ; sous macOS et Linux, il est
-> souvent déjà là (`python3 --version`).
 
 ---
 
@@ -37,13 +35,13 @@ Home Assistant garde :
 
 Donc :
 
-- **pour le passé, vous aurez des heures**, pas des quarts d'heure ; le service le sait (chaque
-  ligne porte sa provenance) et adapte son analyse ;
+- **pour le passé, vous aurez des heures**, pas des quarts d'heure ; le service le sait et adapte
+  son analyse ;
 - **le quart d'heure n'existe que pour les ~10 derniers jours** ;
 - pour avoir du quart d'heure sur la durée, il faut l'**enregistrer au fil de l'eau** : c'est ce
   que fait l'intégration `sbg_energy_export`, à partir du jour où vous l'installez (voir son
-  README). Augmenter `purge_keep_days` marche aussi, mais fait grossir la base de Home Assistant
-  de tous les capteurs, pas seulement de l'énergie.
+  README ; pas encore publiée au 06/10/2026). Augmenter `purge_keep_days` marche aussi, mais fait
+  grossir la base de Home Assistant de tous les capteurs, pas seulement de l'énergie.
 
 ---
 
@@ -53,7 +51,7 @@ Donc :
    *Configuration de l'énergie*).
 2. Notez ce qui est configuré : **Réseau électrique** (prélèvement, et injection si vous avez des
    panneaux), **Panneaux solaires**, **Batterie domestique**, **Consommation d'appareils
-   individuels**.
+   individuels**. Ce sont des **compteurs d'énergie cumulée** (kWh ou Wh).
 3. Facultatif : **Outils de développement → Statistiques** liste toutes les statistiques à long
    terme et leurs éventuels problèmes (unité changée, capteur disparu). Cet outil sert à
    **vérifier et corriger**, il **n'exporte rien**. Si une statistique d'énergie y montre un
@@ -61,34 +59,59 @@ Donc :
 
 ---
 
-## Chemin A — sans jeton : les téléchargements du tableau Énergie
+## Chemin A — sans jeton : l'intégration « Import Statistics »
 
-1. Ouvrez le **tableau de bord Énergie**.
-2. En haut, choisissez une **période de 1 à 3 jours** (cliquez sur la date, choisissez *Jour*, ou
-   une plage personnalisée de 3 jours au plus). Au-delà de 3 jours, Home Assistant passe au jour
-   et le fichier ne sert plus.
-3. Menu **⋮** en haut à droite → **Télécharger les données** (*Download data* si votre interface est en anglais). Vous obtenez `energy.csv`.
-4. Recommencez pour chaque tranche voulue. Renommez les fichiers au fur et à mesure
-   (`energy_2026-01-01.csv`, `energy_2026-01-04.csv`…) dans un même dossier.
-5. Dans ce dossier, avec `sbg_ha_export.py` :
+[Import Statistics](https://github.com/klausj1/homeassistant-statistics) (klausj1, version
+5.3.0, Home Assistant 2026.1 ou plus récent) exporte les statistiques à long terme, donc
+**horaires**, dans un fichier CSV ou TSV.
 
+1. Installez **Import Statistics** par HACS, redémarrez Home Assistant, puis **Paramètres →
+   Appareils et services → Ajouter une intégration → Import Statistics**.
+2. Ouvrez **Outils de développement → Actions**, passez en mode YAML et collez :
+
+   ```yaml
+   action: import_statistics.export_statistics
+   data:
+     filename: sbg_export.csv
+     entities:
+       - sensor.mon_compteur_prelevement
+       - sensor.mon_compteur_injection
+     start_time: "2025-10-01 00:00:00"
+     end_time: "2026-10-01 00:00:00"
+     decimal: "."
+     counter_fields: sum
    ```
-   python sbg_ha_export.py --depuis-csv energy_*.csv --appareil sensor.ma_borne=voiture --appareil sensor.ma_pac=pac
-   ```
 
-   - `--appareil statistique=catégorie` pour **chaque** appareil que vous voulez inclure, avec sa
-     catégorie : `voiture`, `pac`, `ballon`, `cuisson` ou `autre`. Les identifiants
-     (`sensor.…`) sont dans la première colonne de `energy.csv`, lignes `device_consumption`.
-   - Sans `--appareil` : aucun appareil (seulement réseau, solaire, batterie, maison).
-6. Le script écrit `sbg_ha_export.csv`. C'est **ce fichier-là** que vous déposez, **pas**
-   les `energy.csv` : ceux-ci contiennent les identifiants de vos capteurs (souvent le nom de la
-   pièce ou de l'appareil), que le service n'a pas besoin de connaître.
+   - `entities` : les capteurs d'énergie cumulée du tableau Énergie (une ligne par capteur ;
+     ajoutez le solaire, la batterie ou des appareils si vous voulez ; les motifs avec `*` sont
+     permis, mais pas `*` seul). Le service reconnaît leur rôle par le contenu et vous le demande
+     si c'est ambigu.
+   - `start_time` / `end_time` : en heure locale de Home Assistant, heures pleines, entre
+     guillemets. Prenez **au moins un an**. Sans ces deux champs, l'export prend tout
+     l'historique.
+   - `counter_fields: sum` : colonnes `sum` et `state` (sans `delta`).
+   - Ne changez pas `datetime_format` (défaut `%d.%m.%Y %H:%M`) : le service le lit tel quel.
+     Le séparateur suit l'extension (`,` pour `.csv`, tabulation pour `.tsv`) ; `decimal` peut
+     être `"."` ou `","`.
+3. Cliquez sur « Exécuter l'action ». Le fichier est écrit dans le **dossier de configuration** de
+   Home Assistant. Récupérez-le avec le module complémentaire **File editor**, **Samba share** ou
+   **Studio Code Server**, ou par SSH.
+4. Déposez-le **tel quel** sur le site, sans l'ouvrir dans Excel.
 
-Ce que vous obtenez : **l'heure**, sur les jours téléchargés.
+Ce que vous obtenez : **l'heure**, sur la période choisie. Le fichier contient les identifiants de
+vos capteurs (`statistic_id`) : le service les lit pour reconnaître les rôles (prélèvement,
+injection…), puis **ne garde que les rôles, aucun nom de capteur**.
 
 ---
 
 ## Chemin B — avec un jeton que vous créez vous-même
+
+Le script `sbg_ha_export.py` (un seul fichier, bibliothèque standard de Python seulement) ne parle
+qu'à **votre** Home Assistant et fabrique un fichier « SBG HA export ». Il n'est pas encore
+publié : il est remis sur demande (contact@sbg-energy.com).
+
+> Python : sous Windows, depuis python.org ou le Microsoft Store ; sous macOS et Linux, il est
+> souvent déjà là (`python3 --version`).
 
 ### 1. Créer le jeton
 
@@ -116,7 +139,8 @@ Le script :
 2. lit la configuration du tableau Énergie et **liste vos appareils** (leurs noms restent sur
    votre ordinateur) ;
 3. demande lesquels exporter : `tous`, `aucun`, ou leurs numéros (`1,3`) ; puis la **catégorie**
-   de chacun (`voiture`, `pac`, `ballon`, `cuisson`, `autre`) ;
+   de chacun (`voiture`, `pac`, `ballon`, `cuisson`, `lavage`, `froid`, `informatique`, `eclairage`,
+   `autre`) ;
 4. lit les statistiques **horaires** depuis le début, mois par mois ;
 5. écrit `sbg_ha_export.csv`.
 
@@ -139,22 +163,26 @@ Profil → **Sécurité** → **Jetons d'accès longue durée** → supprimez `e
 la prochaine fois.
 
 Ce que vous obtenez : **l'heure depuis le début** de vos statistiques, et avec `--pas 15`,
-**le quart d'heure des ~10 derniers jours**.
+**le quart d'heure des ~10 derniers jours**. Le fichier ne contient ni nom d'appareil ni
+identifiant de capteur.
 
 ---
 
 ## Déposer le fichier
 
-Sur analyse.sbg-energy.com, déposez `sbg_ha_export.csv`. Le service vérifie le fichier (pas
-régulier, bilan de la maison, appareils ≤ consommation…) et vous dit ce qu'il a pu en tirer.
-Les appareils deviennent des équipements **déclarés** de votre maison (voiture, pompe à chaleur…),
-sans leur nom.
+Sur <https://sbg-energy.com/donnees-compteur/>, déposez le fichier d'Import Statistics (chemin A)
+ou `sbg_ha_export.csv` (chemin B). Le service vérifie le fichier (pas régulier, bilan de la
+maison, appareils ≤ consommation…) et vous dit ce qu'il a pu en tirer. Il ne garde que les
+rôles (prélèvement, injection, solaire, batterie, appareils sous une catégorie), jamais les noms
+de capteurs ni d'appareils.
 
 ## Questions fréquentes
 
-- **« Mon fichier a des lignes `trou` »** : Home Assistant n'avait pas de données (arrêt, capteur
-  indisponible). Le service en tient compte.
-- **« La consommation est vide sur certaines heures »** : un des compteurs (réseau, solaire,
-  batterie) manquait ou a fait un saut impossible ; l'heure n'est pas inventée.
+- **« Mon fichier a des lignes `trou` »** (chemin B) : Home Assistant n'avait pas de données
+  (arrêt, capteur indisponible). Le service en tient compte.
+- **« La consommation est vide sur certaines heures »** (chemin B) : un des compteurs (réseau,
+  solaire, batterie) manquait ou a fait un saut impossible ; l'heure n'est pas inventée.
+- **« L'export Import Statistics est vide »** : vérifiez les noms de capteurs (ceux du tableau
+  Énergie) et que `start_time` / `end_time` sont des heures pleines entre guillemets.
 - **« Je veux du quart d'heure sur un an »** : il faut l'enregistrer à partir de maintenant
   (intégration `sbg_energy_export`). Home Assistant ne l'a pas gardé.

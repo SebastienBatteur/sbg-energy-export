@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Intégration complète avec un vrai recorder (SQLite en mémoire)."""
 from __future__ import annotations
 

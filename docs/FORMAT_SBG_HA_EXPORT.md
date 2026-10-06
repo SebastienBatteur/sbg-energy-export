@@ -5,7 +5,7 @@ Format ouvert pour transmettre à un service d'analyse (analyse.sbg-energy.com) 
 et, au choix de l'utilisateur, les appareils suivis.
 
 Produit par :
-- l'intégration Home Assistant `sbg_energy_export` (dépôt `sbg-ha-export`) ;
+- l'intégration Home Assistant `sbg_energy_export` (dépôt `sbg-energy-export`) ;
 - le script manuel `sbg_ha_export.py` (même dépôt, dossier `outils/`), sans rien installer.
 
 Lu par : `sbg_optimisation/tools/contrats/lecture/ha_export.py` (lecteur déterministe, sans IA).
@@ -100,8 +100,23 @@ La première ligne est exactement `# SBG HA export`. Ensuite, des lignes `# clé
 | une colonne par appareil choisi | consommation de l'appareil |
 
 **Appareils** : nom neutre `<catégorie>_<rang>` (`voiture_1`, `pac_1`, `pac_2`…), catégorie choisie
-par l'utilisateur parmi `voiture`, `pac` (pompe à chaleur), `ballon` (eau chaude), `cuisson`,
-`autre`. Un appareil mesuré à l'intérieur d'un autre (option « inclus dans » du tableau Énergie,
+par l'utilisateur dans une **liste fermée** :
+
+| Code | Appareils |
+|---|---|
+| `voiture` | voiture électrique, borne de recharge |
+| `pac` | pompe à chaleur, chauffage électrique, climatisation |
+| `ballon` | eau chaude (ballon, chauffe-eau) |
+| `cuisson` | four, plaques, micro-ondes |
+| `lavage` | lave-linge, sèche-linge, lave-vaisselle |
+| `froid` | frigo, congélateur, cave à vin |
+| `informatique` | informatique et réseau (box, ordinateur, serveur, télévision…) |
+| `eclairage` | éclairage |
+| `autre` | tout le reste |
+
+`lavage`, `froid`, `informatique` et `eclairage` ont été ajoutés le 06/10/2026 (extension
+compatible : les fichiers qui n'utilisent que les cinq premiers codes ne changent pas ; la version
+reste 1). Un lecteur refuse un code hors de cette liste. Un appareil mesuré à l'intérieur d'un autre (option « inclus dans » du tableau Énergie,
 `included_in_stat`) porte `inclus_dans=` vers son parent ; si le parent n'est pas exporté, la mention
 disparaît.
 
@@ -169,7 +184,7 @@ Verdict `valide` ou `a_verifier` ; un fichier `a_verifier` n'est jamais utilisé
 ## 5. Exemple synthétique (valeurs inventées)
 
 Pas de 15 min ; deux heures du passé réparties, puis trois quarts d'heure mesurés et un trou.
-Le même fichier est dans `exemple_synthetique.csv` (dépôt sbg-ha-export, dossier docs/).
+Le même fichier est dans `exemple_synthetique.csv` (dépôt sbg-energy-export, dossier docs/).
 
 ```
 # SBG HA export

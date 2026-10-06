@@ -48,8 +48,15 @@ Puis : **Paramètres → Appareils et services → Ajouter une intégration → 
 
 1. **Appareils à exporter** : *Tous*, *Aucun* ou *Une sélection* parmi les appareils individuels
    du tableau Énergie.
-2. **Catégorie** de chaque appareil retenu : voiture électrique, pompe à chaleur, ballon d'eau
-   chaude, cuisson, autre. Une catégorie est proposée d'après le nom ; corrigez-la si besoin.
+   L'écran les classe du plus utile au moins utile pour l'analyse : gros consommateurs et
+   pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond
+   (froid, informatique, éclairage), avec une phrase sur l'intérêt de chacun ; les recommandés
+   sont cochés par défaut, vous restez libre.
+2. **Catégorie** de chaque appareil retenu : voiture / borne, PAC / chauffage, eau chaude,
+   cuisson, lavage, froid, informatique et réseau, éclairage, autre. Elle est proposée par des
+   règles fixes (sans IA) : le nom, puis l'appareil Home Assistant (nom, modèle, fabricant), puis
+   la puissance typique (une heure à 5,5 kWh ou plus = recharge de voiture) ; corrigez-la si
+   besoin.
 3. **Conservation locale** (années, **3** par défaut) : les mois plus anciens sont supprimés.
 4. **Pas plus fin : 5 minutes** (désactivé par défaut) : garde les périodes de 5 minutes au lieu
    des quarts d'heure. Une résolution plus fine aide à reconnaître les appareils (démarrages,
@@ -99,10 +106,14 @@ par l'heure répartie. Les fichiers de la version 0.1.0 (`quarts/`) sont repris 
 
 ## Sans installer l'intégration
 
-Voir [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) et le script
-[`outils/sbg_ha_export.py`](outils/sbg_ha_export.py) (Python 3.9+, bibliothèque standard
-seulement) : à partir des téléchargements du tableau Énergie, ou avec un jeton d'accès que vous
-créez vous-même.
+Voir [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) :
+
+- **sans jeton** : l'export horaire de l'intégration HACS
+  [Import Statistics](https://github.com/klausj1/homeassistant-statistics) (klausj1) se dépose tel
+  quel sur le service ;
+- **avec un jeton** que vous créez vous-même : le script
+  [`outils/sbg_ha_export.py`](outils/sbg_ha_export.py) (Python 3.9+, bibliothèque standard
+  seulement) produit un fichier « SBG HA export ».
 
 ## Développement
 
@@ -111,6 +122,8 @@ créez vous-même.
   identiques).
 - `custom_components/sbg_energy_export/stockage.py` : le stockage local (Python pur).
 - `outils/mesurer_stockage.py` : mesure de la place prise (stockage et export) sur un an simulé.
+- `custom_components/sbg_energy_export/categories.py` : catégories proposées et appareils recommandés (règles fixes).
+- `docs/icone/` : icône (SVG, PNG 256 et 512 px), dessin maison.
 - Tests : `pytest` avec `pytest-homeassistant-custom-component` (Linux ou WSL ; Home Assistant ne
   tourne pas sous Windows), un vrai recorder SQLite en mémoire :
 
@@ -121,4 +134,4 @@ créez vous-même.
 
 ## Licence
 
-Proposée : MIT (voir [LICENSE](LICENSE)), à confirmer.
+[Apache-2.0](LICENSE) (voir aussi [NOTICE](NOTICE)).

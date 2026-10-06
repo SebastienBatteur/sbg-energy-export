@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Enregistrement local des mesures fines, à partir des statistiques de 5 minutes.
 
 Home Assistant garde les statistiques de 5 minutes environ 10 jours

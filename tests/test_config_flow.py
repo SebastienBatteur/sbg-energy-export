@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Configuration par l'interface."""
 from __future__ import annotations
 
@@ -51,10 +52,17 @@ async def test_selection_et_categories(hass: HomeAssistant) -> None:
     assert r["type"] is FlowResultType.FORM and r["step_id"] == "user"
     r = await hass.config_entries.flow.async_configure(r["flow_id"], {"choix": "selection"})
     assert r["step_id"] == "selection"
+    # classés par intérêt pour l'analyse ; les recommandés cochés, le frigo (fond) non
+    champ = next(iter(r["data_schema"].schema))
+    assert champ.default() == ["sensor.boiler", "sensor.borne_voiture"]
+    options = r["data_schema"].schema[champ].config["options"]
+    assert [o["value"] for o in options] == ["sensor.boiler", "sensor.borne_voiture", "sensor.frigo"]
+    assert options[1]["label"].startswith("sensor.borne_voiture — Car / charger · recommended:")
+    assert "optional" in options[2]["label"]
     r = await hass.config_entries.flow.async_configure(r["flow_id"], {"appareils": ["sensor.borne_voiture", "sensor.boiler"]})
     assert r["step_id"] == "categories"
     cles = [str(k) for k in r["data_schema"].schema]
-    assert cles == ["sensor.borne_voiture", "sensor.boiler"]
+    assert cles == ["sensor.boiler", "sensor.borne_voiture"]
     defauts = {str(k): k.default() for k in r["data_schema"].schema}
     assert defauts == {"sensor.borne_voiture": "voiture", "sensor.boiler": "ballon"}
     r = await hass.config_entries.flow.async_configure(r["flow_id"], {"sensor.borne_voiture": "voiture",
@@ -94,6 +102,17 @@ async def test_options_tous(hass: HomeAssistant) -> None:
     assert entree.options["choix"] == "tous"
     assert entree.options["categories"]["sensor.frigo"] == "autre"
     assert entree.options["conservation_ans"] == 3 and entree.options["pas_5min"] is False
+
+
+def test_deviner_categorie_nouvelles_categories_et_puissance() -> None:
+    assert deviner_categorie("Lave-vaisselle") == "lavage"
+    assert deviner_categorie("Sèche-linge") == "lavage"
+    assert deviner_categorie("Frigo cuisine") == "froid"
+    assert deviner_categorie("Box internet") == "informatique"
+    assert deviner_categorie("Lampes salon") == "eclairage"
+    assert deviner_categorie("Prise 3", "Prise connectée", "Zaptec Go") == "voiture"  # appareil Home Assistant
+    assert deviner_categorie("Prise 3", kwh_h_max=7.2) == "voiture"                  # puissance typique
+    assert deviner_categorie("Prise 3", kwh_h_max=2.0) == "autre"
 
 
 def test_deviner_categorie() -> None:

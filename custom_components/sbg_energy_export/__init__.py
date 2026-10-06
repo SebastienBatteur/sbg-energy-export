@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """SBG Energy Export : vos données du tableau Énergie au format ouvert « SBG HA export ».
 
 * Chaque quart d'heure (ou chaque période de 5 min, en option) est enregistré

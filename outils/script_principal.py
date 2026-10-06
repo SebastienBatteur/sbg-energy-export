@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 
 # ======================================================================
 # Script : lecture des statistiques et écriture du fichier.
@@ -234,7 +235,8 @@ def principal(argv: list | None = None) -> int:
     p.add_argument("--role", action="append", default=[],
                    help="avec --depuis-json : prelevement=sensor.x (aussi injection, solaire, charge, decharge)")
     p.add_argument("--appareil", action="append", default=[],
-                   help="avec --depuis-json ou --depuis-csv : sensor.x=voiture (pac, ballon, cuisson, autre)")
+                   help="avec --depuis-json ou --depuis-csv : sensor.x=voiture "
+                        "(pac, ballon, cuisson, lavage, froid, informatique, eclairage, autre)")
     p.add_argument("--appareils", help="avec --url : tous, aucun, ou numéros 1,3")
     p.add_argument("--categorie", action="append", default=[], help="avec --url : 1=voiture")
     p.add_argument("--pas", type=int, choices=(5, 15, 60), default=60,

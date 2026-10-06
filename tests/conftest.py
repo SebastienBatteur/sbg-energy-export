@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Fixtures communes.
 
 Le tableau Énergie dépend du recorder : le recorder (SQLite en mémoire) doit être

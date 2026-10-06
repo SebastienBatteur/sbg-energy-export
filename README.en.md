@@ -46,8 +46,14 @@ Then **Settings → Devices & services → Add integration → SBG Energy Export
 ## Configuration
 
 1. **Devices to export**: *All*, *None* or *A selection* of the Energy dashboard's individual devices.
-2. **Category** of each selected device: electric car, heat pump, water heater, cooking, other.
-   A category is suggested from the device name; correct it if needed.
+   The screen lists them from the most to the least useful for the analysis: large and
+   controllable loads (car, heat pump, hot water), then cooking and washing, then base load
+   (cold, IT, lighting), with one sentence on why; recommended ones are ticked by default, you
+   remain free to choose.
+2. **Category** of each selected device: car / charger, heat pump / heating, hot water, cooking,
+   washing, cold, IT and network, lighting, other. It is suggested by fixed rules (no AI): the
+   name, then the Home Assistant device (name, model, manufacturer), then the typical power (an
+   hour at 5.5 kWh or more = car charging); correct it if needed.
 3. **Keep local data** (years, **3** by default): older months are deleted.
 4. **Finest step: 5 minutes** (off by default): keeps 5-minute periods instead of quarter-hours.
    A finer resolution helps recognise devices (starts, cycles); it takes about 2.5 times more
@@ -93,9 +99,14 @@ split hour. Files from version 0.1.0 (`quarts/`) are converted automatically.
 
 ## Without the integration
 
-See [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) (French) and the script
-[`outils/sbg_ha_export.py`](outils/sbg_ha_export.py) (Python 3.9+, standard library only): from
-Energy-dashboard downloads, or with a long-lived access token you create yourself.
+See [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) (French):
+
+- **without a token**: the hourly export of the HACS integration
+  [Import Statistics](https://github.com/klausj1/homeassistant-statistics) (klausj1) can be
+  uploaded to the service as is;
+- **with a long-lived access token** you create yourself: the script
+  [`outils/sbg_ha_export.py`](outils/sbg_ha_export.py) (Python 3.9+, standard library only)
+  produces an "SBG HA export" file.
 
 ## Development
 
@@ -103,6 +114,8 @@ Energy-dashboard downloads, or with a long-lived access token you create yoursel
   manual script (`outils/assembler_script.py` copies the block; a test checks they are identical).
 - `custom_components/sbg_energy_export/stockage.py`: local storage (pure Python).
 - `outils/mesurer_stockage.py`: measures storage and export size over a simulated year.
+- `custom_components/sbg_energy_export/categories.py`: suggested categories and recommended devices (fixed rules).
+- `docs/icone/`: icon (SVG, 256 and 512 px PNG), drawn in-house.
 - Tests: `pytest` with `pytest-homeassistant-custom-component` (Linux or WSL; Home Assistant does
   not run on Windows), with a real in-memory SQLite recorder:
 
@@ -113,4 +126,4 @@ Energy-dashboard downloads, or with a long-lived access token you create yoursel
 
 ## Licence
 
-Proposed: MIT (see [LICENSE](LICENSE)), to be confirmed.
+[Apache-2.0](LICENSE) (see also [NOTICE](NOTICE)).

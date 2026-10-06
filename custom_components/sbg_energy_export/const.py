@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Constantes de SBG Energy Export."""
 from __future__ import annotations
 

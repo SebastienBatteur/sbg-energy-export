@@ -4,10 +4,10 @@
   "codeowners": ["@SebastienBatteur"],
   "config_flow": true,
   "dependencies": ["energy", "http", "recorder"],
-  "documentation": "https://github.com/SebastienBatteur/sbg-ha-export",
+  "documentation": "https://github.com/SebastienBatteur/sbg-energy-export",
   "integration_type": "service",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/SebastienBatteur/sbg-ha-export/issues",
+  "issue_tracker": "https://github.com/SebastienBatteur/sbg-energy-export/issues",
   "requirements": [],
   "single_config_entry": true,
   "version": "0.2.0"

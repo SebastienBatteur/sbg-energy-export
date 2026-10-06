@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Production du fichier « SBG HA export » et lien de téléchargement local.
 
 Le passé vient des statistiques à long terme (horaires, gardées pour toujours) ;

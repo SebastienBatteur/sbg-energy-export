@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Format « SBG HA export » : construction et écriture (sans Home Assistant)."""
 from __future__ import annotations
 

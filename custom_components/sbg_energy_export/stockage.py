@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Stockage local des mesures fines (5 ou 15 min), un fichier par mois.
 
 Python pur (bibliothèque standard) : testé sans Home Assistant, appelé dans un

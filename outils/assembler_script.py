@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Assemble ``outils/sbg_ha_export.py`` : un seul fichier à donner à l'utilisateur.
 
     python outils/assembler_script.py
@@ -13,6 +14,7 @@ DEBUT = "# === CODE PARTAGE : debut"
 FIN = "# === CODE PARTAGE : fin ==="
 
 ENTETE = '''#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
 """sbg_ha_export.py : exporte les données du tableau Énergie de Home Assistant
 au format ouvert « SBG HA export » (CSV), pour le déposer soi-même sur
 analyse.sbg-energy.com.
@@ -28,7 +30,7 @@ Exemples :
     python sbg_ha_export.py --depuis-csv energy*.csv --appareil sensor.borne=voiture
 
 Fichier généré par outils/assembler_script.py : ne pas modifier à la main.
-Licence : voir LICENSE du dépôt sbg-ha-export.
+Licence : Apache-2.0 (voir LICENSE et NOTICE du dépôt sbg-energy-export).
 """
 from __future__ import annotations
 '''

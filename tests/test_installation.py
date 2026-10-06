@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Installation sur un Home Assistant qui a 1 an de statistiques horaires et 10 jours
 de statistiques de 5 minutes (vrai recorder SQLite en mémoire ; les statistiques de
 5 minutes sont simulées, le recorder de test n'en compile pas).

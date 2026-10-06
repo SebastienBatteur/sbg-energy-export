@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Stockage local : fichiers mensuels, ajout, fusion, compression, conservation (sans Home Assistant)."""
 from __future__ import annotations
 

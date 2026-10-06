@@ -16,14 +16,14 @@
       },
       "selection": {
         "title": "Sélection",
-        "description": "Cochez les appareils à inclure.",
+        "description": "Les appareils sont classés du plus utile au moins utile pour l'analyse : gros consommateurs et pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond (froid, informatique, éclairage). Les recommandés sont cochés ; vous restez libre.",
         "data": {
           "appareils": "Appareils"
         }
       },
       "categories": {
         "title": "Catégories",
-        "description": "Choisissez la catégorie de chaque appareil (proposée d'après son nom)."
+        "description": "Choisissez la catégorie de chaque appareil (proposée d'après son nom, son appareil Home Assistant et sa puissance typique)."
       }
     },
     "abort": {
@@ -48,14 +48,14 @@
       },
       "selection": {
         "title": "Sélection",
-        "description": "Cochez les appareils à inclure.",
+        "description": "Les appareils sont classés du plus utile au moins utile pour l'analyse : gros consommateurs et pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond (froid, informatique, éclairage). Les recommandés sont cochés ; vous restez libre.",
         "data": {
           "appareils": "Appareils"
         }
       },
       "categories": {
         "title": "Catégories",
-        "description": "Choisissez la catégorie de chaque appareil (proposée d'après son nom)."
+        "description": "Choisissez la catégorie de chaque appareil (proposée d'après son nom, son appareil Home Assistant et sa puissance typique)."
       }
     }
   },
@@ -69,10 +69,14 @@
     },
     "categorie": {
       "options": {
-        "voiture": "Voiture électrique",
-        "pac": "Pompe à chaleur",
-        "ballon": "Ballon d'eau chaude",
-        "cuisson": "Cuisson",
+        "voiture": "Voiture / borne",
+        "pac": "PAC / chauffage",
+        "ballon": "Eau chaude",
+        "cuisson": "Cuisson (four, plaques)",
+        "lavage": "Lavage (lave-linge, sèche-linge, lave-vaisselle)",
+        "froid": "Froid (frigo, congélateur)",
+        "informatique": "Informatique et réseau",
+        "eclairage": "Éclairage",
         "autre": "Autre"
       }
     }

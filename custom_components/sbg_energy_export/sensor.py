@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Capteur : dernier quart d'heure enregistré localement."""
 from __future__ import annotations
 
