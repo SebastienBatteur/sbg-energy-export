@@ -1,23 +1,34 @@
-"""Enregistrement local des quarts d'heure, à partir des statistiques de 5 minutes.
+"""Enregistrement local des mesures fines, à partir des statistiques de 5 minutes.
 
 Home Assistant garde les statistiques de 5 minutes environ 10 jours
 (``purge_keep_days``) et les statistiques horaires pour toujours. Pour avoir un
-historique au quart d'heure, il faut donc l'enregistrer au fil de l'eau : c'est
-le rôle de ce module. Toutes les 15 minutes (et au démarrage, pour rattraper un
-arrêt de moins de ``purge_keep_days``), il additionne les trois périodes de
-5 minutes de chaque quart d'heure et ajoute une ligne par statistique dans
-``<config>/sbg_energy_export/quarts/quarts_AAAA-MM.csv``.
+historique plus fin que l'heure, il faut donc l'enregistrer au fil de l'eau :
+c'est le rôle de ce module. Toutes les 15 minutes (et au démarrage, pour
+rattraper un arrêt de moins de ``purge_keep_days``), il lit les statistiques de
+5 minutes et enregistre (``stockage.py``) :
 
-Le fichier local contient toutes les sources du tableau Énergie (réseau,
-solaire, batterie, tous les appareils) avec leurs identifiants : il reste dans
-Home Assistant, comme sa propre base de données. Le choix des appareils et
-l'anonymisation s'appliquent à l'export.
+* par défaut, chaque quart d'heure (somme des trois périodes de 5 min) ;
+* avec l'option « pas plus fin : 5 minutes », chaque période de 5 min telle quelle.
+
+Seules les statistiques utiles sont enregistrées : les sources réseau, solaire
+et batterie du tableau Énergie, et les appareils choisis par l'utilisateur.
+
+* **Installation** : le premier passage remonte aussi loin que les statistiques
+  de 5 minutes existent (~10 jours) ; avec le passé horaire, l'export contient
+  donc dès le premier jour tout l'historique en horaire et ~10 jours au pas fin.
+* **Appareil ajouté** : enregistré à partir de ce moment, et rattrapé sur les
+  ~10 jours où ses statistiques de 5 minutes existent encore. Même chose pour
+  toutes les statistiques quand le pas enregistré change.
+* **Appareil retiré** : n'est plus enregistré. Ce qui l'a déjà été reste jusqu'à
+  la fin de la durée de conservation, sans être exporté : un historique fin ne
+  se reconstruit pas, et un appareil décoché par erreur ou remis plus tard
+  retrouve ainsi son passé. Rien ne quitte Home Assistant.
+* **Mois terminés** compressés, mois au-delà de la durée de conservation supprimés.
 """
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Iterable, Mapping, Sequence
-import csv
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
@@ -31,8 +42,21 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.helpers.storage import Store
 
-from .const import DELAI_QUART_S, DOMAIN, SOUS_DOSSIER_QUARTS
-from .sbg_format import ROLES, appareils_du_tableau, depuis_preferences, variations_par_quart
+from . import stockage
+from .const import (
+    ANCIEN_SOUS_DOSSIER_QUARTS,
+    CHOIX_AUCUN,
+    CHOIX_TOUS,
+    CONSERVATION_DEFAUT,
+    DELAI_QUART_S,
+    DOMAIN,
+    OPT_APPAREILS,
+    OPT_CHOIX,
+    OPT_CINQ_MINUTES,
+    OPT_CONSERVATION,
+    SOUS_DOSSIER_MESURES,
+)
+from .sbg_format import ROLES, appareils_du_tableau, depuis_preferences, regrouper, variations_par_cinq
 
 _LOGGER = logging.getLogger(__name__)
 UNITES = {"energy": "kWh"}
@@ -45,12 +69,23 @@ def utc(secondes: int) -> datetime:
     return datetime.fromtimestamp(secondes, timezone.utc)
 
 
-def statistiques_suivies(prefs: Mapping[str, Any] | None) -> set[str]:
-    """Toutes les statistiques d'énergie électrique du tableau Énergie."""
+def appareils_choisis(prefs: Mapping[str, Any], options: Mapping[str, Any]) -> list[str]:
+    """Statistiques des appareils choisis par l'utilisateur (tous, aucun, une sélection)."""
+    tous = [d["stat_consumption"] for d in appareils_du_tableau(prefs)]
+    choix = options.get(OPT_CHOIX, CHOIX_AUCUN)
+    if choix == CHOIX_TOUS:
+        return tous
+    if choix == CHOIX_AUCUN:
+        return []
+    voulus = set(options.get(OPT_APPAREILS, []))
+    return [s for s in tous if s in voulus]
+
+
+def statistiques_suivies(prefs: Mapping[str, Any] | None, options: Mapping[str, Any]) -> set[str]:
+    """Sources réseau, solaire, batterie du tableau Énergie, et appareils choisis."""
     if not prefs:
         return set()
-    config = depuis_preferences(prefs, [d["stat_consumption"] for d in appareils_du_tableau(prefs)], {})
-    return config.statistiques()
+    return depuis_preferences(prefs, appareils_choisis(prefs, options), {}).statistiques()
 
 
 def a_des_sources(prefs: Mapping[str, Any] | None) -> bool:
@@ -70,53 +105,41 @@ async def async_statistiques(
     return {s: [dict(l) for l in lignes] for s, lignes in resultat.items()}
 
 
-def _ecrire_quarts(dossier: Path, lignes: Sequence[tuple[int, str, float]]) -> None:
-    """Ajoute des lignes aux fichiers mensuels (fil d'exécution annexe)."""
-    dossier.mkdir(parents=True, exist_ok=True)
-    par_mois: dict[str, list[tuple[int, str, float]]] = {}
-    for ligne in lignes:
-        par_mois.setdefault(utc(ligne[0]).strftime("%Y-%m"), []).append(ligne)
-    for mois, contenu in par_mois.items():
-        chemin = dossier / f"quarts_{mois}.csv"
-        nouveau = not chemin.exists()
-        with chemin.open("a", encoding="utf-8", newline="") as f:
-            w = csv.writer(f, lineterminator="\n")
-            if nouveau:
-                w.writerow(["debut_utc", "statistique", "kwh"])
-            for t, stat, kwh in contenu:
-                w.writerow([utc(t).strftime("%Y-%m-%dT%H:%M:%SZ"), stat, f"{kwh:.6f}"])
+def lire_mesures(dossier: Path, ids: Iterable[str], debut: int, fin: int, pas_min: int) -> dict[str, dict[int, float]]:
+    """Mesures au pas demandé (fil d'exécution annexe).
 
-
-def lire_quarts(dossier: Path, ids: Iterable[str], debut: int, fin: int) -> dict[str, dict[int, float]]:
-    """Quarts d'heure enregistrés, par statistique (fil d'exécution annexe)."""
-    voulus = set(ids)
-    sortie: dict[str, dict[int, float]] = {s: {} for s in voulus}
-    if not dossier.is_dir():
-        return sortie
-    for chemin in sorted(dossier.glob("quarts_*.csv")):
-        with chemin.open(encoding="utf-8", newline="") as f:
-            for ligne in csv.DictReader(f):
-                if ligne["statistique"] not in voulus:
-                    continue
-                t = int(datetime.strptime(ligne["debut_utc"], "%Y-%m-%dT%H:%M:%SZ")
-                        .replace(tzinfo=timezone.utc).timestamp())
-                if debut <= t < fin:
-                    sortie[ligne["statistique"]][t] = float(ligne["kwh"])
+    Pas de 15 min : quarts enregistrés, complétés par les quarts reconstitués à
+    partir des périodes de 5 min enregistrées (les trois doivent être connues).
+    Pas de 5 min : périodes de 5 min enregistrées seulement.
+    """
+    ids = set(ids)
+    if pas_min == 5:
+        return stockage.lire(dossier, 5, ids, debut, fin)
+    sortie = stockage.lire(dossier, 15, ids, debut, fin)
+    for s, par_t in stockage.lire(dossier, 5, ids, debut, fin).items():
+        for t, v in regrouper(par_t, 300, QUART).items():
+            sortie.setdefault(s, {}).setdefault(t, v)
     return sortie
 
 
 class Collecteur:
-    """Agrège et enregistre chaque quart d'heure depuis l'installation."""
+    """Enregistre les mesures fines depuis l'installation."""
 
-    def __init__(self, hass: HomeAssistant, dossier: Path) -> None:
+    def __init__(self, hass: HomeAssistant, dossier: Path, options: Mapping[str, Any] | None = None) -> None:
         self.hass = hass
-        self.dossier = dossier / SOUS_DOSSIER_QUARTS
+        self.racine = dossier
+        self.dossier = dossier / SOUS_DOSSIER_MESURES
+        self.options = dict(options or {})
+        self.pas = 5 if self.options.get(OPT_CINQ_MINUTES) else 15
+        self.conservation_ans = int(self.options.get(OPT_CONSERVATION) or CONSERVATION_DEFAUT)
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.collecteur")
         self._verrou = asyncio.Lock()
         self._arret: Callable[[], None] | None = None
         self._ecouteurs: list[Callable[[], None]] = []
-        self.prochain: int | None = None  # début du prochain quart à traiter
-        self.premier: int | None = None   # premier quart enregistré
+        self.prochain: int | None = None  # début de la prochaine période à traiter
+        self.premier: int | None = None   # première période enregistrée
+        self.suivies: set[str] | None = None    # statistiques enregistrées au dernier passage
+        self.pas_enregistre: int | None = None  # pas du dernier passage
 
     @callback
     def async_ecouter(self, rappel: Callable[[], None]) -> Callable[[], None]:
@@ -129,6 +152,10 @@ class Collecteur:
         etat = await self._store.async_load() or {}
         self.prochain = etat.get("prochain")
         self.premier = etat.get("premier")
+        if "suivies" in etat:
+            self.suivies = set(etat["suivies"])
+        if self.prochain is not None:
+            self.pas_enregistre = etat.get("pas", 15)  # 0.1.0 : quart d'heure, sans « pas »
         self._arret = async_track_utc_time_change(
             self.hass, self._async_tic, minute=[2, 17, 32, 47], second=30
         )
@@ -143,50 +170,102 @@ class Collecteur:
     async def _async_tic(self, _maintenant: datetime) -> None:
         await self.async_rattraper()
 
-    async def async_rattraper(self, maintenant: float | None = None) -> int:
-        """Traite tous les quarts d'heure complets pas encore enregistrés.
+    async def _async_sauver(self) -> None:
+        await self._store.async_save({
+            "prochain": self.prochain, "premier": self.premier,
+            "suivies": sorted(self.suivies or []), "pas": self.pas_enregistre or self.pas,
+        })
 
-        Rend le nombre de quarts traités. Au premier passage, remonte aussi loin
-        que les statistiques de 5 min le permettent (``purge_keep_days``).
+    async def _async_periodes(
+        self, ids: set[str], debut: int, fin: int
+    ) -> tuple[dict[str, dict[int, float]], dict[str, dict[int, float]]]:
+        """Énergies par période de 5 min et par quart d'heure complet, de ``debut`` à ``fin``."""
+        brut = await async_statistiques(self.hass, ids, debut - 300, fin, "5minute")
+        cinq = {s: {t: v for t, v in par_t.items() if debut <= t < fin}
+                for s, par_t in variations_par_cinq(brut).items()}
+        quarts = {s: regrouper(par_t, 300, QUART) for s, par_t in cinq.items()}
+        return cinq, quarts
+
+    async def _async_enregistrer(self, cinq: Mapping[str, Mapping[int, float]],
+                                 quarts: Mapping[str, Mapping[int, float]], fin: int) -> None:
+        """Écrit, au pas choisi, les périodes antérieures à ``fin``."""
+        valeurs = cinq if self.pas == 5 else quarts
+        retenues = {s: {t: v for t, v in par_t.items() if t < fin} for s, par_t in valeurs.items()}
+        retenues = {s: par_t for s, par_t in retenues.items() if par_t}
+        if not retenues:
+            return
+        await self.hass.async_add_executor_job(stockage.enregistrer, self.dossier, self.pas, retenues)
+        debut = min(min(par_t) for par_t in retenues.values())
+        self.premier = debut if self.premier is None else min(self.premier, debut)
+
+    async def async_rattraper(self, maintenant: float | None = None) -> int:
+        """Traite toutes les périodes complètes pas encore enregistrées.
+
+        Rend le nombre de quarts d'heure traités. Au premier passage, remonte
+        aussi loin que les statistiques de 5 min le permettent
+        (``purge_keep_days``) ; une statistique ajoutée depuis le passage
+        précédent (ou toutes, si le pas enregistré change) est rattrapée sur la
+        même durée.
         """
         async with self._verrou:
             prefs = (await async_get_manager(self.hass)).data
-            ids = statistiques_suivies(prefs)
+            ids = statistiques_suivies(prefs, self.options)
             if not ids:
                 return 0
+            ancien = self.racine / ANCIEN_SOUS_DOSSIER_QUARTS
+            if await self.hass.async_add_executor_job(ancien.is_dir):
+                n = await self.hass.async_add_executor_job(stockage.migrer_ancien, ancien, self.dossier, ids)
+                _LOGGER.info("Version 0.1.0 : %s valeurs au quart d'heure reprises dans le stockage actuel", n)
             maintenant = time.time() if maintenant is None else maintenant
             fin = int((maintenant - DELAI_QUART_S) // QUART * QUART)
-            if self.prochain is None:
-                jours = max(1, int(get_instance(self.hass).keep_days))
-                self.prochain = int((maintenant - jours * 86400 + 3600) // 3600 * 3600)
+            jours = max(1, int(get_instance(self.hass).keep_days))
+            plus_ancien = int((maintenant - jours * 86400 + 3600) // 3600 * 3600)
+            if self.prochain is None:  # installation
+                self.prochain = plus_ancien
+                nouvelles: set[str] = set()
+            elif self.pas_enregistre != self.pas:
+                nouvelles = set(ids)
+            elif self.suivies is None:  # 0.1.0 : toutes les statistiques étaient enregistrées
+                nouvelles = set()
+            else:
+                nouvelles = ids - self.suivies
+            depart = self.prochain
+
             traites = 0
             while self.prochain < fin:
                 bout = min(fin, self.prochain + TRANCHE_S)
-                brut = await async_statistiques(self.hass, ids, self.prochain - 300, bout, "5minute")
-                quarts = variations_par_quart(brut)
-                lignes = sorted(
-                    (t, s, v) for s, par_t in quarts.items() for t, v in par_t.items()
-                    if self.prochain <= t < bout
-                )
+                cinq, quarts = await self._async_periodes(ids, self.prochain, bout)
                 if bout == fin and maintenant - bout < 3600:
                     # Statistiques récentes pas encore compilées (recorder en retard) :
-                    # on s'arrête après le dernier quart qui a des données.
-                    derniers = [t for t, _, _ in lignes]
+                    # on s'arrête après le dernier quart complet qui a des données.
+                    derniers = [t for par_t in quarts.values() for t in par_t]
                     if not derniers:
                         break
                     bout = max(derniers) + QUART
-                    lignes = [l for l in lignes if l[0] < bout]
-                if lignes:
-                    await self.hass.async_add_executor_job(_ecrire_quarts, self.dossier, lignes)
-                    if self.premier is None:
-                        self.premier = lignes[0][0]
+                await self._async_enregistrer(cinq, quarts, bout)
                 traites += (bout - self.prochain) // QUART
                 self.prochain = bout
-                await self._store.async_save({"prochain": self.prochain, "premier": self.premier})
+                await self._async_sauver()
+
+            # Statistiques nouvelles : rattrapées tant que leurs 5 min existent.
+            t = plus_ancien
+            while nouvelles and t < depart:
+                bout = min(depart, t + TRANCHE_S)
+                cinq, quarts = await self._async_periodes(nouvelles, t, bout)
+                await self._async_enregistrer(cinq, quarts, bout)
+                t = bout
+            self.suivies = set(ids)
+            self.pas_enregistre = self.pas
+            await self._async_sauver()
+
+            await self.hass.async_add_executor_job(
+                stockage.entretenir, self.dossier, stockage.mois_de(self.prochain),
+                stockage.mois_limite(int(maintenant), self.conservation_ans),
+            )
             for rappel in list(self._ecouteurs):
                 rappel()
             return traites
 
-    async def async_lire(self, ids: Iterable[str], debut: int, fin: int) -> dict[str, dict[int, float]]:
-        """Quarts d'heure enregistrés entre ``debut`` et ``fin``."""
-        return await self.hass.async_add_executor_job(lire_quarts, self.dossier, set(ids), debut, fin)
+    async def async_lire(self, ids: Iterable[str], debut: int, fin: int, pas_min: int = 15) -> dict[str, dict[int, float]]:
+        """Mesures enregistrées entre ``debut`` et ``fin``, au pas de 5 ou 15 min."""
+        return await self.hass.async_add_executor_job(lire_mesures, self.dossier, set(ids), debut, fin, pas_min)

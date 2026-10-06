@@ -81,7 +81,7 @@ async def installe(hass: HomeAssistant, freezer: FrozenDateTimeFactory, tmp_path
     entree.add_to_hass(hass)
     with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
         assert await hass.config_entries.async_setup(entree.entry_id)
-        await hass.async_block_till_done()
+        await hass.async_block_till_done(wait_background_tasks=True)
         yield entree
 
 
@@ -101,11 +101,12 @@ async def test_export_horaire(installe, hass: HomeAssistant, tmp_path: Path) -> 
 
 
 async def test_quarts_enregistres_puis_export_15(installe, hass: HomeAssistant, tmp_path: Path) -> None:
-    fichiers = sorted((tmp_path / "sbg_energy_export" / "quarts").glob("quarts_*.csv"))
-    assert [f.name for f in fichiers] == ["quarts_2026-01.csv"]
+    fichiers = sorted((tmp_path / "sbg_energy_export" / "mesures").iterdir())
+    assert [f.name for f in fichiers] == ["mesures_15min_2026-01.csv"]
     contenu = fichiers[0].read_text(encoding="utf-8").splitlines()
-    assert contenu[0] == "debut_utc,statistique,kwh"
-    assert len(contenu) - 1 == 4 * len(PAR_HEURE)  # 4 quarts × 5 statistiques
+    # seulement les sources et l'appareil choisi : pas le frigo
+    assert contenu[0] == "debut_utc,sensor.borne_garage,sensor.export,sensor.import,sensor.pv"
+    assert contenu[1:] == [f"2026-01-06T10:{m:02d}:00Z,0.15,0.05,0.25,0.1" for m in (0, 15, 30, 45)]
     etat = hass.states.get("sensor.sbg_energy_export_last_recorded_quarter_hour")
     assert etat is not None and etat.state.startswith("2026-01-06T11:00:00")
     assert etat.attributes["premier_quart"].startswith("2026-01-06T10:00:00")

@@ -39,11 +39,17 @@ COLONNES_FIXES: tuple[str, ...] = (*ROLES, CONSO)
 
 CATEGORIES: tuple[str, ...] = ("voiture", "pac", "ballon", "cuisson", "autre")
 
+MESURE_5 = "mesure_5min"
 MESURE_15 = "mesure_15min"
 MESURE_60 = "mesure_60min"
 HEURE_REPARTIE = "heure_repartie"
 TROU = "trou"
-PROVENANCES: tuple[str, ...] = (MESURE_15, MESURE_60, HEURE_REPARTIE, TROU)
+PROVENANCES: tuple[str, ...] = (MESURE_5, MESURE_15, MESURE_60, HEURE_REPARTIE, TROU)
+
+# Pas permis (minutes) et provenance d'une mesure à ce pas. Le pas de 5 min est
+# celui des statistiques à court terme de Home Assistant, sans regroupement.
+PAS_MINUTES: tuple[int, ...] = (5, 15, 60)
+MESURE_AU_PAS: dict[int, str] = {5: MESURE_5, 15: MESURE_15, 60: MESURE_60}
 
 # Au-delà de 60 kW de moyenne, ce n'est pas un logement : c'est un compteur qui
 # rattrape d'un coup l'énergie d'une coupure. La période est laissée inconnue.
@@ -254,26 +260,35 @@ def construire_lignes(
     return lignes
 
 
-def assembler_quarts(heures: Sequence[Ligne], quarts: Mapping[int, Ligne]) -> list[Ligne]:
-    """Fichier au quart d'heure : quarts mesurés, sinon heure répartie en 4.
+def assembler(heures: Sequence[Ligne], mesures: Mapping[int, Ligne], pas_s: int) -> list[Ligne]:
+    """Fichier au pas fin (5 ou 15 min) : périodes mesurées, sinon heure répartie.
 
-    Pour chaque heure : si au moins un quart est mesuré, les 4 quarts viennent
-    des mesures (les quarts manquants sont des trous) ; sinon l'heure est
-    répartie en 4 parts égales (provenance « heure_repartie ») ; une heure
-    inconnue donne 4 trous.
+    Pour chaque heure : si au moins une période est mesurée, toutes les périodes
+    de l'heure viennent des mesures (celles qui manquent sont des trous) ; sinon
+    l'heure est répartie en parts égales (4 au pas de 15 min, 12 au pas de
+    5 min ; provenance « heure_repartie ») ; une heure inconnue donne des trous.
+    Les parts d'une même heure partagent le même dictionnaire de valeurs (lu
+    seulement) : un an au pas de 5 min reste léger en mémoire.
     """
+    n = 3600 // pas_s
     sortie: list[Ligne] = []
     for h in heures:
-        qs = [quarts.get(h.debut + 900 * k) for k in range(4)]
-        if any(q is not None and q.provenance != TROU for q in qs):
-            for k, q in enumerate(qs):
-                sortie.append(q if q is not None else Ligne(h.debut + 900 * k, TROU, {c: None for c in h.valeurs}))
+        ms = [mesures.get(h.debut + pas_s * k) for k in range(n)]
+        if any(m is not None and m.provenance != TROU for m in ms):
+            vide: dict[str, float | None] = {c: None for c in h.valeurs}
+            for k, m in enumerate(ms):
+                sortie.append(m if m is not None else Ligne(h.debut + pas_s * k, TROU, vide))
         elif h.provenance == TROU:
-            sortie.extend(Ligne(h.debut + 900 * k, TROU, dict(h.valeurs)) for k in range(4))
+            sortie.extend(Ligne(h.debut + pas_s * k, TROU, h.valeurs) for k in range(n))
         else:
-            quart = {c: (None if v is None else v / 4.0) for c, v in h.valeurs.items()}
-            sortie.extend(Ligne(h.debut + 900 * k, HEURE_REPARTIE, dict(quart)) for k in range(4))
+            part = {c: (None if v is None else v / n) for c, v in h.valeurs.items()}
+            sortie.extend(Ligne(h.debut + pas_s * k, HEURE_REPARTIE, part) for k in range(n))
     return sortie
+
+
+def assembler_quarts(heures: Sequence[Ligne], quarts: Mapping[int, Ligne]) -> list[Ligne]:
+    """Fichier au quart d'heure : quarts mesurés, sinon heure répartie en 4."""
+    return assembler(heures, quarts, 900)
 
 
 # ------------------------------------------------------------------ écriture
@@ -299,11 +314,14 @@ def ecrire(
     genere_le: int,
 ) -> str:
     """Texte complet du fichier (UTF-8, fin de ligne LF, séparateur virgule)."""
-    if pas_minutes not in (15, 60):
-        raise ValueError("pas de 15 ou 60 minutes seulement")
+    if pas_minutes not in PAS_MINUTES:
+        raise ValueError("pas de 5, 15 ou 60 minutes seulement")
     colonnes = config.colonnes()
     pas_s = pas_minutes * 60
-    quarts = [l.debut for l in lignes if l.provenance == MESURE_15]
+    # Premier instant mesuré au pas fin : quart d'heure (fichiers à 15 et 60 min,
+    # clé d'origine) ou période de 5 min (fichiers à 5 min).
+    mesure_fine = MESURE_5 if pas_minutes == 5 else MESURE_15
+    mesures = [l.debut for l in lignes if l.provenance == mesure_fine]
     meta = [
         f"# {FORMAT}",
         f"# version: {VERSION}",
@@ -313,7 +331,7 @@ def ecrire(
         "# horodatage: debut de l'intervalle, UTC",
         f"# debut: {iso(lignes[0].debut) if lignes else ''}",
         f"# fin: {iso(lignes[-1].debut + pas_s) if lignes else ''}",
-        f"# debut_mesure_15min: {iso(min(quarts)) if quarts else 'aucun'}",
+        f"# debut_{mesure_fine}: {iso(min(mesures)) if mesures else 'aucun'}",
         f"# non_configure: {','.join(config.non_configures())}",
         f"# generateur: {generateur}",
         f"# genere_le: {iso(genere_le)}",
@@ -339,10 +357,13 @@ def exporter(
     fuseau: str,
     generateur: str,
     genere_le: int,
-    quarts: Mapping[str, Mapping[int, float]] | None = None,
+    mesures: Mapping[str, Mapping[int, float]] | None = None,
 ) -> str:
     """Tout en un : statistiques horaires (format ``statistics_during_period``)
-    et, pour le pas de 15 min, énergies au quart d'heure déjà calculées."""
+    et, pour le pas de 5 ou 15 min, énergies déjà calculées à ce pas
+    (``mesures`` : statistique → début de période → kWh)."""
+    if pas_minutes not in PAS_MINUTES:
+        raise ValueError("pas de 5, 15 ou 60 minutes seulement")
     debut -= debut % 3600
     fin += -fin % 3600
     energies_h = {s: variations(horaires.get(s, []), 3600) for s in config.statistiques()}
@@ -350,8 +371,15 @@ def exporter(
     if pas_minutes == 60:
         lignes = heures
     else:
-        q = construire_lignes(config, quarts or {}, debut, fin, 900, MESURE_15)
-        lignes = assembler_quarts(heures, {l.debut: l for l in q if l.provenance != TROU})
+        pas_s = pas_minutes * 60
+        mesures = mesures or {}
+        instants = [t for par_t in mesures.values() for t in par_t if debut <= t < fin]
+        fines: list[Ligne] = []
+        if instants:  # seulement la période couverte par des mesures
+            a = min(instants)
+            fines = construire_lignes(config, mesures, a - a % 3600, max(instants) + pas_s,
+                                      pas_s, MESURE_AU_PAS[pas_minutes])
+        lignes = assembler(heures, {l.debut: l for l in fines if l.provenance != TROU}, pas_s)
     return ecrire(config, lignes, pas_minutes, fuseau, generateur, genere_le)
 
 
@@ -360,10 +388,16 @@ def variations_par_quart(lignes_5min: Mapping[str, Sequence[Mapping]]) -> dict[s
     return {s: regrouper(variations(l, 300), 300, 900) for s, l in lignes_5min.items()}
 
 
+def variations_par_cinq(lignes_5min: Mapping[str, Sequence[Mapping]]) -> dict[str, dict[int, float]]:
+    """Statistiques de 5 min → énergie par période de 5 min, telle quelle."""
+    return {s: variations(l, 300) for s, l in lignes_5min.items()}
+
+
 __all__ = [
     "Appareil", "Colonne", "Configuration", "Ligne", "CATEGORIES", "COLONNES_FIXES", "PROVENANCES",
-    "appareils_du_tableau", "assembler_quarts", "construire_lignes", "depuis_preferences", "ecrire",
-    "exporter", "iso", "nombre", "regrouper", "variations", "variations_par_quart",
+    "MESURE_AU_PAS", "PAS_MINUTES", "appareils_du_tableau", "assembler", "assembler_quarts", "construire_lignes",
+    "depuis_preferences", "ecrire", "exporter", "iso", "nombre", "regrouper", "variations", "variations_par_cinq",
+    "variations_par_quart",
 ]
 # === CODE PARTAGE : fin ===
 
@@ -383,7 +417,7 @@ import sys
 import time
 import urllib.parse
 
-VERSION_SCRIPT = "0.1.0"
+VERSION_SCRIPT = "0.2.0"
 NOMS_ROLES = {
     "prelevement": PRELEVEMENT, "injection": INJECTION, "solaire": SOLAIRE,
     "charge": CHARGE, "decharge": DECHARGE,
@@ -605,7 +639,8 @@ def principal(argv: list | None = None) -> int:
                    help="avec --depuis-json ou --depuis-csv : sensor.x=voiture (pac, ballon, cuisson, autre)")
     p.add_argument("--appareils", help="avec --url : tous, aucun, ou numéros 1,3")
     p.add_argument("--categorie", action="append", default=[], help="avec --url : 1=voiture")
-    p.add_argument("--pas", type=int, choices=(15, 60), default=60)
+    p.add_argument("--pas", type=int, choices=(5, 15, 60), default=60,
+                   help="60 (défaut) ; 15 ou 5 : les ~10 derniers jours au pas fin, le reste en heure répartie")
     p.add_argument("--debut", help="AAAA-MM-JJ (UTC), par défaut le début des statistiques")
     p.add_argument("--fin", help="AAAA-MM-JJ (UTC, exclu), par défaut l'heure en cours")
     p.add_argument("--fuseau", default=None,
@@ -617,7 +652,7 @@ def principal(argv: list | None = None) -> int:
     fin = en_secondes(a.fin + "T00:00:00Z") if a.fin else maintenant - maintenant % 3600
     debut = en_secondes(a.debut + "T00:00:00Z") if a.debut else None
     fuseau = a.fuseau or "Europe/Brussels"
-    quarts = None
+    mesures = None
     generateur = f"sbg_ha_export.py {VERSION_SCRIPT}"
 
     if a.url:
@@ -640,9 +675,9 @@ def principal(argv: list | None = None) -> int:
             if not a.debut:  # la première ligne de statistiques sert de référence
                 debuts = [en_secondes(l["start"]) for lignes in horaires.values() for l in lignes]
                 debut = min(debuts) + 3600 if debuts else debut
-            if a.pas == 15:
+            if a.pas != 60:
                 cinq = statistiques(ws, ids, max(debut, fin - 12 * 86400) - 300, fin, "5minute", 86400)
-                quarts = variations_par_quart(cinq)
+                mesures = variations_par_quart(cinq) if a.pas == 15 else variations_par_cinq(cinq)
         finally:
             ws.fermer()
     elif a.depuis_json or a.depuis_csv:
@@ -674,7 +709,7 @@ def principal(argv: list | None = None) -> int:
         p.error("donnez --url, --depuis-json ou --depuis-csv")
         return 2
 
-    texte = exporter(config, horaires, debut, fin, a.pas, fuseau, generateur, maintenant, quarts)
+    texte = exporter(config, horaires, debut, fin, a.pas, fuseau, generateur, maintenant, mesures)
     with open(a.sortie, "w", encoding="utf-8", newline="\n") as f:
         f.write(texte)
     lignes = texte.count("\n") - texte.count("\n#") - 2

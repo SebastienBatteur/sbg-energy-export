@@ -5,6 +5,7 @@ exporter:
       selector:
         select:
           options:
+            - "5"
             - "15"
             - "60"
     debut:

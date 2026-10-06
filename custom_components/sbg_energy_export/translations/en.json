@@ -5,7 +5,13 @@
         "title": "Devices to export",
         "description": "Your Energy dashboard tracks {nombre} device(s). Which ones should the file include? Their names are never exported: only a category (voiture_1, pac_1...).",
         "data": {
-          "choix": "Devices"
+          "choix": "Devices",
+          "conservation_ans": "Keep local data (years)",
+          "pas_5min": "Finest step: 5 minutes"
+        },
+        "data_description": {
+          "conservation_ans": "Fine-resolution recordings stay inside Home Assistant (finished months compressed). Older months are deleted.",
+          "pas_5min": "Off by default. Keeps 5-minute periods instead of quarter-hours (about 2.5 times more storage): starts and cycles make devices easier to recognise. Exports can then be made at 5 or 15 minutes."
         }
       },
       "selection": {
@@ -31,7 +37,13 @@
         "title": "Devices to export",
         "description": "Your Energy dashboard tracks {nombre} device(s). Which ones should the file include? Their names are never exported: only a category (voiture_1, pac_1...).",
         "data": {
-          "choix": "Devices"
+          "choix": "Devices",
+          "conservation_ans": "Keep local data (years)",
+          "pas_5min": "Finest step: 5 minutes"
+        },
+        "data_description": {
+          "conservation_ans": "Fine-resolution recordings stay inside Home Assistant (finished months compressed). Older months are deleted.",
+          "pas_5min": "Off by default. Keeps 5-minute periods instead of quarter-hours (about 2.5 times more storage): starts and cycles make devices easier to recognise. Exports can then be made at 5 or 15 minutes."
         }
       },
       "selection": {
@@ -67,6 +79,9 @@
   },
   "entity": {
     "button": {
+      "exporter_5": {
+        "name": "Export (5 min)"
+      },
       "exporter_15": {
         "name": "Export (15 min)"
       },
@@ -88,11 +103,11 @@
   "services": {
     "exporter": {
       "name": "Export",
-      "description": "Writes the \"SBG HA export\" file (past data hourly, quarter-hours since installation) and notifies a local download link. Nothing is sent anywhere.",
+      "description": "Writes the \"SBG HA export\" file (past data hourly, quarter-hours or 5-minute periods where recorded) and notifies a local download link. Nothing is sent anywhere.",
       "fields": {
         "pas": {
           "name": "Step (minutes)",
-          "description": "15 or 60."
+          "description": "5 (only with the \"finest step: 5 minutes\" option), 15 or 60."
         },
         "debut": {
           "name": "Start",

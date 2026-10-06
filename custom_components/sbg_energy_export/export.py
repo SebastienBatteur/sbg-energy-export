@@ -1,15 +1,14 @@
 """Production du fichier « SBG HA export » et lien de téléchargement local.
 
 Le passé vient des statistiques à long terme (horaires, gardées pour toujours) ;
-le quart d'heure vient des enregistrements du collecteur, depuis
-l'installation. Le fichier est écrit dans
+le pas fin (15 min, ou 5 min si l'option est choisie) vient des
+enregistrements du collecteur : ~10 jours avant l'installation, puis en continu. Le fichier est écrit dans
 ``<config>/sbg_energy_export/exports/`` et se télécharge par un lien signé,
 servi par Home Assistant lui-même et valable une heure. Rien n'est envoyé
 ailleurs : l'utilisateur dépose le fichier lui-même sur analyse.sbg-energy.com.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from http import HTTPStatus
@@ -26,22 +25,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.http import KEY_HASS
 
-from .collecteur import Collecteur, async_statistiques
+from .collecteur import Collecteur, appareils_choisis, async_statistiques
 from .const import (
-    CHOIX_AUCUN,
-    CHOIX_TOUS,
     DOMAIN,
-    OPT_APPAREILS,
     OPT_CATEGORIES,
-    OPT_CHOIX,
+    OPT_CINQ_MINUTES,
     SOUS_DOSSIER_EXPORTS,
     VALIDITE_LIEN_H,
     VERSION,
 )
-from .sbg_format import appareils_du_tableau, depuis_preferences, en_secondes, exporter
+from .sbg_format import depuis_preferences, en_secondes, exporter
 
 URL_FICHIER = f"/api/{DOMAIN}/fichier"
-NOM_VALIDE = re.compile(r"^sbg_ha_export_\d{8}-\d{6}_(15|60)min\.csv$")
+NOM_VALIDE = re.compile(r"^sbg_ha_export_\d{8}-\d{6}_(5|15|60)min\.csv$")
 MOIS_S = 31 * 86400
 
 
@@ -54,18 +50,6 @@ class Resultat:
     lignes: int
     debut: str
     fin: str
-
-
-def appareils_choisis(prefs: Mapping[str, Any], options: Mapping[str, Any]) -> list[str]:
-    """Statistiques des appareils à exporter selon le choix de l'utilisateur."""
-    tous = [d["stat_consumption"] for d in appareils_du_tableau(prefs)]
-    choix = options.get(OPT_CHOIX, CHOIX_AUCUN)
-    if choix == CHOIX_TOUS:
-        return tous
-    if choix == CHOIX_AUCUN:
-        return []
-    voulus = set(options.get(OPT_APPAREILS, []))
-    return [s for s in tous if s in voulus]
 
 
 async def async_premier_instant(hass: HomeAssistant, ids: set[str], fin: int) -> int:
@@ -92,6 +76,8 @@ async def async_exporter(
     fin: date | None = None,
 ) -> Resultat:
     """Écrit le fichier et rend son chemin et un lien de téléchargement signé."""
+    if pas == 5 and not options.get(OPT_CINQ_MINUTES):
+        raise HomeAssistantError("Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes ».")
     prefs = (await async_get_manager(hass)).data
     if not prefs:
         raise HomeAssistantError("Le tableau Énergie n'est pas configuré.")
@@ -104,7 +90,7 @@ async def async_exporter(
     t_debut = _jour(debut) if debut else await async_premier_instant(hass, ids, t_fin)
     if t_fin <= t_debut:
         raise HomeAssistantError("La fin doit suivre le début.")
-    if pas == 15:
+    if pas != 60:
         await collecteur.async_rattraper()
     horaires: dict[str, list[dict[str, Any]]] = {s: [] for s in ids}
     t = t_debut - 3600  # la ligne qui précède donne l'énergie de la première heure
@@ -113,10 +99,10 @@ async def async_exporter(
         for s, lignes in (await async_statistiques(hass, ids, t, bout, "hour")).items():
             horaires.setdefault(s, []).extend(lignes)
         t = bout
-    quarts = await collecteur.async_lire(ids, t_debut, t_fin) if pas == 15 else None
+    mesures = await collecteur.async_lire(ids, t_debut, t_fin, pas) if pas != 60 else None
     texte = await hass.async_add_executor_job(
         exporter, config, horaires, t_debut, t_fin, pas, str(hass.config.time_zone),
-        f"{DOMAIN} {VERSION}", maintenant, quarts,
+        f"{DOMAIN} {VERSION}", maintenant, mesures,
     )
     nom = f"sbg_ha_export_{datetime.fromtimestamp(maintenant, timezone.utc):%Y%m%d-%H%M%S}_{pas}min.csv"
     chemin = dossier / SOUS_DOSSIER_EXPORTS / nom

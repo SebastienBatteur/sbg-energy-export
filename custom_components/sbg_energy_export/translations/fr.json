@@ -5,7 +5,13 @@
         "title": "Appareils à exporter",
         "description": "Votre tableau Énergie suit {nombre} appareil(s). Lesquels voulez-vous inclure dans le fichier ? Leurs noms ne sont jamais exportés : seulement une catégorie (voiture_1, pac_1...).",
         "data": {
-          "choix": "Appareils"
+          "choix": "Appareils",
+          "conservation_ans": "Conservation locale (années)",
+          "pas_5min": "Pas plus fin : 5 minutes"
+        },
+        "data_description": {
+          "conservation_ans": "Les enregistrements fins restent dans Home Assistant (mois terminés compressés). Les mois plus anciens sont supprimés.",
+          "pas_5min": "Désactivé par défaut. Garde les périodes de 5 minutes au lieu des quarts d'heure (environ 2,5 fois plus de place) : démarrages et cycles aident à reconnaître les appareils. L'export peut alors se faire à 5 ou 15 minutes."
         }
       },
       "selection": {
@@ -31,7 +37,13 @@
         "title": "Appareils à exporter",
         "description": "Votre tableau Énergie suit {nombre} appareil(s). Lesquels voulez-vous inclure dans le fichier ? Leurs noms ne sont jamais exportés : seulement une catégorie (voiture_1, pac_1...).",
         "data": {
-          "choix": "Appareils"
+          "choix": "Appareils",
+          "conservation_ans": "Conservation locale (années)",
+          "pas_5min": "Pas plus fin : 5 minutes"
+        },
+        "data_description": {
+          "conservation_ans": "Les enregistrements fins restent dans Home Assistant (mois terminés compressés). Les mois plus anciens sont supprimés.",
+          "pas_5min": "Désactivé par défaut. Garde les périodes de 5 minutes au lieu des quarts d'heure (environ 2,5 fois plus de place) : démarrages et cycles aident à reconnaître les appareils. L'export peut alors se faire à 5 ou 15 minutes."
         }
       },
       "selection": {
@@ -67,6 +79,9 @@
   },
   "entity": {
     "button": {
+      "exporter_5": {
+        "name": "Exporter (5 min)"
+      },
       "exporter_15": {
         "name": "Exporter (15 min)"
       },
@@ -88,11 +103,11 @@
   "services": {
     "exporter": {
       "name": "Exporter",
-      "description": "Écrit le fichier « SBG HA export » (passé en horaire, quart d'heure depuis l'installation) et notifie un lien de téléchargement local. Rien n'est envoyé.",
+      "description": "Écrit le fichier « SBG HA export » (passé en horaire, quarts d'heure ou périodes de 5 min là où ils sont enregistrés) et notifie un lien de téléchargement local. Rien n'est envoyé.",
       "fields": {
         "pas": {
           "name": "Pas (minutes)",
-          "description": "15 ou 60."
+          "description": "5 (seulement avec l'option « pas plus fin : 5 minutes »), 15 ou 60."
         },
         "debut": {
           "name": "Début",

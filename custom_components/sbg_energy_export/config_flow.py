@@ -1,4 +1,5 @@
-"""Configuration par l'interface : quels appareils exporter, et leur catégorie."""
+"""Configuration par l'interface : quels appareils, leur catégorie, et le stockage local
+(durée de conservation, pas de 5 minutes)."""
 from __future__ import annotations
 
 import re
@@ -8,6 +9,10 @@ from homeassistant.components.energy.data import async_get_manager
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -20,10 +25,14 @@ from .const import (
     CHOIX_AUCUN,
     CHOIX_SELECTION,
     CHOIX_TOUS,
+    CONSERVATION_DEFAUT,
+    CONSERVATION_MAX,
     DOMAIN,
     OPT_APPAREILS,
     OPT_CATEGORIES,
     OPT_CHOIX,
+    OPT_CINQ_MINUTES,
+    OPT_CONSERVATION,
 )
 from .sbg_format import CATEGORIES, appareils_du_tableau
 
@@ -73,12 +82,19 @@ class _Etapes:
                 vol.Required(OPT_CHOIX, default=defaut): SelectSelector(SelectSelectorConfig(
                     options=[CHOIX_TOUS, CHOIX_AUCUN, CHOIX_SELECTION],
                     translation_key="choix", mode=SelectSelectorMode.LIST)),
+                vol.Required(OPT_CONSERVATION, default=self._options.get(OPT_CONSERVATION, CONSERVATION_DEFAUT)):
+                    NumberSelector(NumberSelectorConfig(min=1, max=CONSERVATION_MAX, step=1,
+                                                        mode=NumberSelectorMode.BOX)),
+                vol.Required(OPT_CINQ_MINUTES, default=self._options.get(OPT_CINQ_MINUTES, False)):
+                    BooleanSelector(),
             }),
             description_placeholders={"nombre": str(len(self._appareils))},
         )
 
     async def _apres_choix(self, saisie: dict[str, Any]) -> ConfigFlowResult:
         self._options[OPT_CHOIX] = saisie[OPT_CHOIX]
+        self._options[OPT_CONSERVATION] = int(saisie.get(OPT_CONSERVATION, CONSERVATION_DEFAUT))
+        self._options[OPT_CINQ_MINUTES] = bool(saisie.get(OPT_CINQ_MINUTES, False))
         if saisie[OPT_CHOIX] == CHOIX_SELECTION and self._appareils:
             return await self.async_step_selection()  # type: ignore[attr-defined]
         if saisie[OPT_CHOIX] == CHOIX_TOUS and self._appareils:

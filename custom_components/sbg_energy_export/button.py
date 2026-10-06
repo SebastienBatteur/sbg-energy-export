@@ -1,4 +1,4 @@
-"""Boutons « Exporter » (quart d'heure et heure)."""
+"""Boutons « Exporter » (5 min si l'option est choisie, quart d'heure, heure)."""
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
@@ -6,14 +6,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import SbgConfigEntry, async_exporter_et_notifier
+from .const import OPT_CINQ_MINUTES
 from .entite import appareil_service
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entree: SbgConfigEntry, ajouter: AddConfigEntryEntitiesCallback
 ) -> None:
-    """Deux boutons : export au quart d'heure, export horaire."""
-    ajouter([BoutonExporter(entree, 15), BoutonExporter(entree, 60)])
+    """Export au quart d'heure, export horaire, et export à 5 min avec l'option."""
+    pas = [5, 15, 60] if entree.options.get(OPT_CINQ_MINUTES) else [15, 60]
+    ajouter([BoutonExporter(entree, p) for p in pas])
 
 
 class BoutonExporter(ButtonEntity):

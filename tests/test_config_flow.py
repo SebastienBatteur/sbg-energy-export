@@ -1,11 +1,15 @@
 """Configuration par l'interface."""
 from __future__ import annotations
 
+from collections.abc import Iterator
+from unittest.mock import patch
+
 from homeassistant import config_entries
 from homeassistant.components.energy.data import async_get_manager
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.setup import async_setup_component
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.sbg_energy_export.config_flow import deviner_categorie
@@ -25,6 +29,14 @@ PREFS = {
         {"stat_consumption": "sensor.frigo"},
     ],
 }
+
+
+@pytest.fixture(autouse=True)
+def sans_demarrage() -> Iterator[None]:
+    """Ces tests portent sur les écrans : l'entrée créée n'est pas démarrée (sinon le
+    rattrapage en arrière-plan interroge le recorder pendant sa fermeture)."""
+    with patch("custom_components.sbg_energy_export.async_setup_entry", return_value=True):
+        yield
 
 
 async def preparer(hass: HomeAssistant, prefs=PREFS) -> None:
@@ -49,15 +61,17 @@ async def test_selection_et_categories(hass: HomeAssistant) -> None:
                                                                       "sensor.boiler": "ballon"})
     assert r["type"] is FlowResultType.CREATE_ENTRY
     assert r["options"] == {"choix": "selection", "appareils": ["sensor.borne_voiture", "sensor.boiler"],
-                            "categories": {"sensor.borne_voiture": "voiture", "sensor.boiler": "ballon"}}
+                            "categories": {"sensor.borne_voiture": "voiture", "sensor.boiler": "ballon"},
+                            "conservation_ans": 3, "pas_5min": False}
 
 
 async def test_aucun(hass: HomeAssistant) -> None:
     await preparer(hass)
     r = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
-    r = await hass.config_entries.flow.async_configure(r["flow_id"], {"choix": "aucun"})
+    r = await hass.config_entries.flow.async_configure(
+        r["flow_id"], {"choix": "aucun", "conservation_ans": 5.0, "pas_5min": True})
     assert r["type"] is FlowResultType.CREATE_ENTRY
-    assert r["options"] == {"choix": "aucun", "appareils": [], "categories": {}}
+    assert r["options"] == {"choix": "aucun", "appareils": [], "categories": {}, "conservation_ans": 5, "pas_5min": True}
 
 
 async def test_tableau_energie_vide(hass: HomeAssistant) -> None:
@@ -79,6 +93,7 @@ async def test_options_tous(hass: HomeAssistant) -> None:
     assert r["type"] is FlowResultType.CREATE_ENTRY
     assert entree.options["choix"] == "tous"
     assert entree.options["categories"]["sensor.frigo"] == "autre"
+    assert entree.options["conservation_ans"] == 3 and entree.options["pas_5min"] is False
 
 
 def test_deviner_categorie() -> None:

@@ -15,7 +15,7 @@ import sys
 import time
 import urllib.parse
 
-VERSION_SCRIPT = "0.1.0"
+VERSION_SCRIPT = "0.2.0"
 NOMS_ROLES = {
     "prelevement": PRELEVEMENT, "injection": INJECTION, "solaire": SOLAIRE,
     "charge": CHARGE, "decharge": DECHARGE,
@@ -237,7 +237,8 @@ def principal(argv: list | None = None) -> int:
                    help="avec --depuis-json ou --depuis-csv : sensor.x=voiture (pac, ballon, cuisson, autre)")
     p.add_argument("--appareils", help="avec --url : tous, aucun, ou numéros 1,3")
     p.add_argument("--categorie", action="append", default=[], help="avec --url : 1=voiture")
-    p.add_argument("--pas", type=int, choices=(15, 60), default=60)
+    p.add_argument("--pas", type=int, choices=(5, 15, 60), default=60,
+                   help="60 (défaut) ; 15 ou 5 : les ~10 derniers jours au pas fin, le reste en heure répartie")
     p.add_argument("--debut", help="AAAA-MM-JJ (UTC), par défaut le début des statistiques")
     p.add_argument("--fin", help="AAAA-MM-JJ (UTC, exclu), par défaut l'heure en cours")
     p.add_argument("--fuseau", default=None,
@@ -249,7 +250,7 @@ def principal(argv: list | None = None) -> int:
     fin = en_secondes(a.fin + "T00:00:00Z") if a.fin else maintenant - maintenant % 3600
     debut = en_secondes(a.debut + "T00:00:00Z") if a.debut else None
     fuseau = a.fuseau or "Europe/Brussels"
-    quarts = None
+    mesures = None
     generateur = f"sbg_ha_export.py {VERSION_SCRIPT}"
 
     if a.url:
@@ -272,9 +273,9 @@ def principal(argv: list | None = None) -> int:
             if not a.debut:  # la première ligne de statistiques sert de référence
                 debuts = [en_secondes(l["start"]) for lignes in horaires.values() for l in lignes]
                 debut = min(debuts) + 3600 if debuts else debut
-            if a.pas == 15:
+            if a.pas != 60:
                 cinq = statistiques(ws, ids, max(debut, fin - 12 * 86400) - 300, fin, "5minute", 86400)
-                quarts = variations_par_quart(cinq)
+                mesures = variations_par_quart(cinq) if a.pas == 15 else variations_par_cinq(cinq)
         finally:
             ws.fermer()
     elif a.depuis_json or a.depuis_csv:
@@ -306,7 +307,7 @@ def principal(argv: list | None = None) -> int:
         p.error("donnez --url, --depuis-json ou --depuis-csv")
         return 2
 
-    texte = exporter(config, horaires, debut, fin, a.pas, fuseau, generateur, maintenant, quarts)
+    texte = exporter(config, horaires, debut, fin, a.pas, fuseau, generateur, maintenant, mesures)
     with open(a.sortie, "w", encoding="utf-8", newline="\n") as f:
         f.write(texte)
     lignes = texte.count("\n") - texte.count("\n#") - 2

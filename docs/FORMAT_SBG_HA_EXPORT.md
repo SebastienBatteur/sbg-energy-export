@@ -10,7 +10,8 @@ Produit par :
 
 Lu par : `sbg_optimisation/tools/contrats/lecture/ha_export.py` (lecteur déterministe, sans IA).
 
-Statut : **version 1, proposée le 06/10/2026**. Rien n'est figé tant que le service ne l'a pas
+Statut : **version 1, proposée le 06/10/2026**, étendue le même jour au **pas de 5 minutes**
+(§ 3.5 : extension compatible, la version reste 1). Rien n'est figé tant que le service ne l'a pas
 publiée ; toute évolution incompatible change le numéro de version.
 
 ---
@@ -50,8 +51,10 @@ recorder (`purge.py` : `find_short_term_statistics_to_purge(purge_before)` avec
 d'historique au quart d'heure sur un an dans Home Assistant. On a :
 
 - **l'heure pour le passé** (depuis que les capteurs existent) ;
-- **le quart d'heure des ~10 derniers jours** ;
-- **le quart d'heure à partir de l'installation** de l'intégration, qui l'enregistre au fil de l'eau.
+- **le quart d'heure (ou les 5 minutes) des ~10 derniers jours** ;
+- **le quart d'heure à partir de l'installation** de l'intégration, qui l'enregistre au fil de l'eau ;
+  avec l'option « pas plus fin : 5 minutes », elle garde les périodes de 5 minutes telles quelles
+  (une résolution plus fine aide à reconnaître les appareils : démarrages, cycles).
 
 Le format le dit, ligne par ligne, avec la **provenance**.
 
@@ -61,7 +64,7 @@ Le format le dit, ligne par ligne, avec la **provenance**.
   point décimal, aucun guillemet.
 - Un **en-tête de métadonnées** : lignes commençant par `#`.
 - Une **ligne d'en-tête de colonnes**, puis **une ligne par pas de temps**.
-- Nom conseillé : `sbg_ha_export_AAAAMMJJ-HHMMSS_15min.csv` (ou `_60min`).
+- Nom conseillé : `sbg_ha_export_AAAAMMJJ-HHMMSS_15min.csv` (ou `_60min`, `_5min`).
 
 ### 3.1 Métadonnées
 
@@ -70,12 +73,13 @@ La première ligne est exactement `# SBG HA export`. Ensuite, des lignes `# clé
 | Clé | Obligatoire | Valeur |
 |---|---|---|
 | `version` | oui | `1` |
-| `pas_minutes` | oui | `15` ou `60` |
+| `pas_minutes` | oui | `5`, `15` ou `60` |
 | `fuseau` | oui | fuseau IANA de la maison (`Europe/Brussels`) ; les instants restent en UTC, le fuseau sert aux plages tarifaires et aux habitudes |
 | `unite` | oui | `kWh` |
 | `horodatage` | non | rappel : début de l'intervalle, UTC |
 | `debut`, `fin` | non | premier instant, et fin exclue, en UTC |
-| `debut_mesure_15min` | non | premier quart d'heure **mesuré**, ou `aucun` |
+| `debut_mesure_15min` | non | fichiers à 15 et 60 min : premier quart d'heure **mesuré**, ou `aucun` |
+| `debut_mesure_5min` | non | fichiers à 5 min (à la place de la précédente) : première période de 5 min **mesurée**, ou `aucun` |
 | `non_configure` | non | colonnes fixes absentes du tableau Énergie (pas de panneaux, pas de batterie…), séparées par des virgules ; ces colonnes sont **vides** dans tout le fichier et valent 0 dans le bilan |
 | `generateur` | non | logiciel et version (`sbg_energy_export 0.1.0`) |
 | `genere_le` | non | instant de production, UTC |
@@ -108,14 +112,27 @@ coordonnées, marque, coût, prix, gaz, eau.
 
 | Valeur | Sens | Pas permis |
 |---|---|---|
+| `mesure_5min` | période de 5 min des statistiques à court terme, telle quelle | 5 |
 | `mesure_15min` | quart d'heure calculé à partir des statistiques de 5 min (somme des 3 périodes) | 15 |
 | `mesure_60min` | heure des statistiques à long terme | 60 |
-| `heure_repartie` | heure des statistiques à long terme **répartie en 4 parts égales** ; ce n'est **pas** une mesure au quart d'heure | 15 |
-| `trou` | aucune donnée ; toutes les cellules sont vides | 15, 60 |
+| `heure_repartie` | heure des statistiques à long terme **répartie en parts égales** : 4 au pas de 15 min, **12** au pas de 5 min ; ce n'est **pas** une mesure au pas fin | 5, 15 |
+| `trou` | aucune donnée ; toutes les cellules sont vides | 5, 15, 60 |
 
-Dans un fichier au pas de 15 min, pour chaque heure : si au moins un quart d'heure est mesuré,
-les 4 quarts viennent des mesures (les quarts manquants sont des `trou`) ; sinon l'heure est
-répartie ; une heure inconnue donne 4 `trou`.
+Dans un fichier au pas de 15 min (ou de 5 min), pour chaque heure : si au moins une période est
+mesurée, les 4 (ou 12) périodes viennent des mesures (celles qui manquent sont des `trou`) ;
+sinon l'heure est répartie en 4 (ou 12) parts égales, alignées sur l'heure ; une heure inconnue
+donne 4 (ou 12) `trou`. Au pas de 5 min, une période connue seulement au quart d'heure n'est pas
+découpée : son heure est répartie (le fichier au pas de 15 min la donne mesurée).
+
+### 3.5 Pas de 5 minutes : compatibilité
+
+L'extension du 06/10/2026 ajoute la valeur `5` à `pas_minutes`, la provenance `mesure_5min` et la
+clé `debut_mesure_5min`. Les fichiers au pas de 15 et 60 min ne changent pas d'un octet : un
+lecteur à jour lit tous les fichiers existants, et un lecteur antérieur refuse proprement un
+fichier au pas de 5 min (pas inconnu) au lieu de le mal lire. La version reste donc **1**.
+Le lecteur à jour applique au pas de 5 min les mêmes contrôles qu'au pas de 15 min (§ 4), avec
+12 parts par heure répartie ; la tolérance du bilan d'une heure répartie tient compte des
+arrondis à 4 décimales de chaque part.
 
 ### 3.4 Valeurs
 
@@ -137,7 +154,8 @@ Un fichier qui ne respecte pas la structure (§ 3.1, 3.2, provenances, nombres) 
 Sinon, contrôles (bibliothèque commune `verifications.py`, ADR-035) :
 
 1. pas régulier, sans doublon ni trou de lignes ; instants alignés sur le pas ;
-2. provenances permises pour le pas ; lignes `trou` vides ; heures réparties = 4 quarts égaux alignés ;
+2. provenances permises pour le pas ; lignes `trou` vides ; heures réparties = 4 quarts (pas de
+   15 min) ou 12 périodes (pas de 5 min) égaux, alignés sur l'heure ;
 3. énergies positives, au plus 60 kW de moyenne ; colonnes non configurées vides ;
 4. **bilan** de chaque ligne : `prélèvement + production − injection − charge + décharge = consommation` (à l'arrondi près) ;
 5. **appareils** : somme des appareils de premier niveau ≤ consommation (tolérance 20 Wh + 5 % par
@@ -193,6 +211,7 @@ de la pompe à chaleur et n'est pas compté deux fois.
 - **Puissance** instantanée, état de charge de la batterie, températures : pas dans la v1.
 - **Gaz et eau** : le tableau Énergie les suit, mais l'analyse électrique n'en a pas besoin.
 - **Coûts** : le service les calcule à partir des contrats, pas des réglages de Home Assistant.
-- **Compression, signature** : le fichier est petit (≈ 1,5 Mo par an et par 7 colonnes à
-  l'heure, ≈ 6,5 Mo au quart d'heure) ; une signature n'apporterait rien tant que l'utilisateur
-  dépose lui-même le fichier.
+- **Compression, signature** : le fichier reste raisonnable (mesuré sur un an simulé avec
+  10 appareils, `outils/mesurer_stockage.py` : ≈ 0,8 Mo à l'heure, ≈ 3,2 Mo au quart d'heure,
+  ≈ 9,2 Mo au pas de 5 min, non compressé) ; une signature n'apporterait rien tant que
+  l'utilisateur dépose lui-même le fichier.

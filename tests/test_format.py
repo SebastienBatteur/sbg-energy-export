@@ -157,3 +157,31 @@ def test_nombre():
 def test_pas_refuse():
     with pytest.raises(ValueError):
         F.ecrire(F.Configuration(), [], 30, "UTC", "x", T0)
+    with pytest.raises(ValueError):
+        F.exporter(F.Configuration(), {}, T0, T0 + H, 10, "UTC", "x", T0)
+
+
+def test_assembler_cinq_minutes_heure_repartie_en_12():
+    c = F.Configuration({F.PRELEVEMENT: ["p"]})
+    heures = F.construire_lignes(c, {"p": {T0: 1.2, T0 + H: 4.0}}, T0, T0 + 3 * H, H, F.MESURE_60)
+    cinq = F.construire_lignes(c, {"p": {T0 + H + 300 * k: 0.3 for k in range(11)}}, T0 + H, T0 + 2 * H, 300, F.MESURE_5)
+    l = F.assembler(heures, {x.debut: x for x in cinq if x.provenance != F.TROU}, 300)
+    assert [x.debut for x in l] == [T0 + 300 * k for k in range(36)]
+    assert [x.provenance for x in l] == [F.HEURE_REPARTIE] * 12 + [F.MESURE_5] * 11 + [F.TROU] + [F.TROU] * 12
+    assert all(x.valeurs[F.PRELEVEMENT] == pytest.approx(0.1) for x in l[:12])
+    assert l[12].valeurs[F.PRELEVEMENT] == 0.3 and l[23].valeurs[F.PRELEVEMENT] is None
+
+
+def test_exporter_cinq_minutes():
+    c = F.Configuration({F.PRELEVEMENT: ["p"]}, [F.Appareil("v", "voiture")])
+    horaires = {"p": cumuls(T0, H, [1.2, 0.6]), "v": cumuls(T0, H, [0.0, 0.0])}
+    mesures = {"p": {T0 + H + 300 * k: 0.05 for k in range(12)}, "v": {T0 + H + 300 * k: 0.0 for k in range(12)}}
+    texte = F.exporter(c, horaires, T0, T0 + 2 * H, 5, "UTC", "test 0", T0 + 3 * H, mesures)
+    assert "# pas_minutes: 5\n" in texte
+    assert "# debut_mesure_5min: 2026-01-05T11:00:00Z\n" in texte and "debut_mesure_15min" not in texte
+    corps = [l for l in texte.splitlines() if not l.startswith("#")]
+    assert len(corps) == 1 + 24
+    assert corps[1] == "2026-01-05T10:00:00Z,heure_repartie,0.1,,,,,0.1,0"
+    assert corps[13] == "2026-01-05T11:00:00Z,mesure_5min,0.05,,,,,0.05,0"
+    # le même jeu au pas de 15 et 60 min ne change pas : clé d'origine
+    assert "# debut_mesure_15min: aucun" in F.exporter(c, horaires, T0, T0 + 2 * H, 60, "UTC", "t", T0)

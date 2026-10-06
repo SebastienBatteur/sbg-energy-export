@@ -4,17 +4,22 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "sbg_energy_export"
-VERSION: Final = "0.1.0"
+VERSION: Final = "0.2.0"
 
 # Dossier de travail, dans le dossier de configuration de Home Assistant.
 DOSSIER: Final = "sbg_energy_export"
-SOUS_DOSSIER_QUARTS: Final = "quarts"
+SOUS_DOSSIER_MESURES: Final = "mesures"
+ANCIEN_SOUS_DOSSIER_QUARTS: Final = "quarts"  # version 0.1.0, migré au démarrage
 SOUS_DOSSIER_EXPORTS: Final = "exports"
 
 # Options de l'entrée de configuration.
 OPT_CHOIX: Final = "choix"            # tous, aucun, selection
 OPT_APPAREILS: Final = "appareils"    # statistiques choisies (selection)
 OPT_CATEGORIES: Final = "categories"  # statistique -> catégorie
+OPT_CONSERVATION: Final = "conservation_ans"  # durée de conservation locale
+OPT_CINQ_MINUTES: Final = "pas_5min"          # garder le pas de 5 min
+CONSERVATION_DEFAUT: Final = 3
+CONSERVATION_MAX: Final = 30
 CHOIX_TOUS: Final = "tous"
 CHOIX_AUCUN: Final = "aucun"
 CHOIX_SELECTION: Final = "selection"
