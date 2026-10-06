@@ -56,7 +56,35 @@
       "categories": {
         "title": "Catégories",
         "description": "Choisissez la catégorie de chaque appareil (proposée d'après son nom, son appareil Home Assistant et sa puissance typique)."
+      },
+      "envoi": {
+        "title": "Envoi à analyse.sbg-energy.com",
+        "description": "**Désactivé par défaut.** Activé, l'intégration envoie à analyse.sbg-energy.com le MÊME contenu que l'export manuel (réseau, solaire, batterie, consommation de la maison et seulement les appareils choisis, sous un nom neutre, au pas choisi), au plus une fois par mois (à partir du 2), seulement les jours que le service n'a pas encore. C'est le seul appel réseau sortant de l'intégration. Finalité : le rapport de votre compte SBG Energy, mis à jour à chaque envoi, et l'alerte « meilleure offre » par e-mail. Données gardées 3 ans glissants, effaçables depuis votre compte ; gratuit pendant la bêta. Conditions : https://analyse.sbg-energy.com/conditions/#home-assistant\n\nCompte SBG Energy : {compte}.",
+        "data": {
+          "envoi_actif": "Envoyer à analyse.sbg-energy.com",
+          "pas_envoi": "Pas envoyé (minutes)",
+          "deconnecter": "Déconnecter mon compte SBG Energy"
+        },
+        "data_description": {
+          "envoi_actif": "Le cocher lance la connexion à votre compte SBG Energy : un code à saisir sur auth.sbg-energy.com. Aucun mot de passe n'est enregistré dans Home Assistant.",
+          "pas_envoi": "5 seulement avec l'option « pas plus fin : 5 minutes ».",
+          "deconnecter": "Oublie la connexion ici et la retire chez SBG Energy ; plus rien n'est envoyé."
+        }
+      },
+      "connexion": {
+        "title": "Connecter votre compte SBG Energy",
+        "description": "Ouvrez {url} et saisissez le code **{code}**, puis connectez-vous à votre compte SBG Energy (avec votre code à 6 chiffres) et acceptez. Cet écran se ferme seul (10 minutes au plus)."
       }
+    },
+    "progress": {
+      "connexion": "Ouvrez {url} et saisissez le code **{code}**. En attente de votre accord…"
+    },
+    "abort": {
+      "auth_injoignable": "auth.sbg-energy.com est injoignable : rien n'a été activé. Réessayez plus tard.",
+      "connexion_echouee": "Connexion non faite : {message} Rien n'a été activé."
+    },
+    "error": {
+      "pas_5_sans_option": "Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes »."
     }
   },
   "selector": {
@@ -79,6 +107,13 @@
         "eclairage": "Éclairage",
         "autre": "Autre"
       }
+    },
+    "pas_envoi": {
+      "options": {
+        "5": "5 minutes",
+        "15": "15 minutes",
+        "60": "Horaire"
+      }
     }
   },
   "entity": {
@@ -91,6 +126,9 @@
       },
       "exporter_60": {
         "name": "Exporter (horaire)"
+      },
+      "envoyer": {
+        "name": "Envoyer maintenant"
       }
     },
     "sensor": {
@@ -99,6 +137,17 @@
         "state_attributes": {
           "premier_quart": {
             "name": "Premier quart d'heure"
+          }
+        }
+      },
+      "dernier_envoi": {
+        "name": "Dernier envoi",
+        "state_attributes": {
+          "prochain_envoi": {
+            "name": "Prochain envoi permis"
+          },
+          "jours_envoyes": {
+            "name": "Jours envoyés"
           }
         }
       }
@@ -120,6 +169,24 @@
         "fin": {
           "name": "Fin",
           "description": "Jour de fin, exclu (UTC). Par défaut : l'heure en cours."
+        }
+      }
+    },
+    "envoyer": {
+      "name": "Envoyer maintenant",
+      "description": "Envoie les jours manquants à analyse.sbg-energy.com (seulement si l'envoi est activé et le compte connecté). Le service accepte un envoi par mois."
+    },
+    "reimporter": {
+      "name": "Réimporter une période",
+      "description": "Renvoie les jours choisis et les REMPLACE sur analyse.sbg-energy.com (3 fois par mois au plus).",
+      "fields": {
+        "debut": {
+          "name": "Début",
+          "description": "Premier jour (UTC)."
+        },
+        "fin": {
+          "name": "Fin",
+          "description": "Jour de fin, exclu (UTC)."
         }
       }
     }

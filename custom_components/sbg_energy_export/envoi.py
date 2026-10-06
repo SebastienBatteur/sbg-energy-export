@@ -1,0 +1,439 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Envoi direct vers analyse.sbg-energy.com (version 0.3.0). DÉSACTIVÉ par défaut.
+
+Rien ne part tant que l'utilisateur n'a pas, dans les options de l'intégration,
+coché « Envoyer à analyse.sbg-energy.com » ET connecté son compte SBG Energy.
+
+* **Connexion, une seule fois** : flux OAuth 2.0 « Device Authorization Grant »
+  (RFC 8628) de Keycloak, client PUBLIC ``sbg-ha-export``. L'intégration affiche
+  un lien et un code ; l'utilisateur se connecte à son compte (avec son code à
+  6 chiffres) sur auth.sbg-energy.com et valide. Aucun mot de passe ni secret
+  client dans Home Assistant : seul le jeton de rafraîchissement (hors ligne,
+  révocable depuis le compte) est gardé dans l'entrée de configuration. Les
+  jetons ne sont JAMAIS journalisés.
+* **Synchronisation incrémentale** : le service dit quels jours il a déjà (par
+  pas et par installation) ; l'intégration n'envoie que les jours UTC complets
+  qui manquent (tout l'historique la première fois, puis la suite, trous
+  compris), par morceaux, au format « SBG HA export » : exactement le contenu de
+  l'export manuel (appareils choisis, sans nom d'entité, au pas choisi).
+* **Au plus un envoi par mois**, imposé par le SERVICE (à partir du 2 du mois) ;
+  « Envoyer maintenant » y est soumis aussi. L'intégration retient la date du
+  prochain envoi permis et ne contacte pas le service avant.
+* **Réimport** (service ``reimporter``) : renvoie une période choisie et
+  REMPLACE ces jours côté service (3 fois par mois au plus, côté service).
+* Le jeton hors ligne expire après 30 jours sans usage : il est renouvelé une
+  fois par semaine (appel à auth.sbg-energy.com seulement, aucune donnée).
+"""
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
+import logging
+import secrets
+import time
+from typing import TYPE_CHECKING, Any
+
+import aiohttp
+from homeassistant.components import persistent_notification
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
+
+from .const import (
+    API_URL,
+    AUTH_URL,
+    CLIENT_ID,
+    DATA_JETON,
+    DATA_SOURCE,
+    DOMAIN,
+    JOURS_PAR_MORCEAU,
+    OCTETS_MAX,
+    OPT_ENVOI,
+    OPT_PAS_ENVOI,
+    PAS_ENVOI_DEFAUT,
+    PORTEES,
+    RENOUVELER_JETON_J,
+    VERSION,
+)
+from .export import async_premier_jour, async_texte
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+
+_LOGGER = logging.getLogger(__name__)
+DELAI_S = 60
+GRANT_DEVICE = "urn:ietf:params:oauth:grant-type:device_code"
+URL_JETON = f"{AUTH_URL}/protocol/openid-connect/token"
+URL_APPAREIL = f"{AUTH_URL}/protocol/openid-connect/auth/device"
+URL_REVOCATION = f"{AUTH_URL}/protocol/openid-connect/revoke"
+AGENT = f"sbg-energy-export/{VERSION} (Home Assistant)"
+
+
+class EnvoiErreur(HomeAssistantError):
+    """Erreur montrée telle quelle à l'utilisateur (jamais de jeton dedans)."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def nouvelle_source() -> str:
+    """Identifiant ALÉATOIRE de l'installation, sans lien avec elle (32 caractères hexadécimaux)."""
+    return secrets.token_hex(16)
+
+
+def actif(entree: ConfigEntry) -> bool:
+    """Envoi activé ET compte connecté : sinon, aucun appel réseau."""
+    return bool(entree.options.get(OPT_ENVOI) and entree.data.get(DATA_JETON))
+
+
+# ------------------------------------------------------------------ connexion
+@dataclass
+class Connexion:
+    """Réponse de l'autorisation d'appareil (RFC 8628)."""
+
+    device_code: str
+    code: str
+    url: str
+    url_complete: str
+    intervalle: float
+    expire: float
+
+
+async def _poster(hass: HomeAssistant, url: str, donnees: dict[str, str]) -> tuple[int, dict[str, Any]]:
+    session = async_get_clientsession(hass)
+    try:
+        async with session.post(url, data=donnees, headers={"User-Agent": AGENT},
+                                timeout=aiohttp.ClientTimeout(total=DELAI_S)) as r:
+            try:
+                corps = await r.json(content_type=None)
+            except (ValueError, aiohttp.ContentTypeError):
+                corps = {}
+            return r.status, corps if isinstance(corps, dict) else {}
+    except (aiohttp.ClientError, TimeoutError) as e:
+        raise EnvoiErreur("reseau", "auth.sbg-energy.com injoignable : réessayez plus tard.") from e
+
+
+async def async_demarrer_connexion(hass: HomeAssistant) -> Connexion:
+    """Demande un code d'appareil à Keycloak."""
+    statut, r = await _poster(hass, URL_APPAREIL, {"client_id": CLIENT_ID, "scope": PORTEES})
+    if statut != 200 or not r.get("device_code") or not r.get("user_code"):
+        raise EnvoiErreur("connexion", "La connexion au compte SBG Energy n'a pas pu démarrer.")
+    return Connexion(r["device_code"], r["user_code"], r.get("verification_uri", ""),
+                     r.get("verification_uri_complete") or r.get("verification_uri", ""),
+                     float(r.get("interval", 5)), time.monotonic() + float(r.get("expires_in", 600)))
+
+
+async def async_attendre_connexion(hass: HomeAssistant, c: Connexion) -> str:
+    """Attend que l'utilisateur valide le code ; rend le jeton de rafraîchissement."""
+    intervalle = c.intervalle
+    while time.monotonic() < c.expire:
+        await asyncio.sleep(intervalle)
+        statut, r = await _poster(hass, URL_JETON, {"grant_type": GRANT_DEVICE, "device_code": c.device_code,
+                                                    "client_id": CLIENT_ID})
+        if statut == 200 and r.get("refresh_token"):
+            if "ha-export" not in str(r.get("scope", "")).split():
+                raise EnvoiErreur("portee", "Le compte n'a pas accordé l'envoi des exports.")
+            return str(r["refresh_token"])
+        erreur = r.get("error")
+        if erreur == "authorization_pending":
+            continue
+        if erreur == "slow_down":
+            intervalle += 5
+            continue
+        if erreur == "access_denied":
+            raise EnvoiErreur("refuse", "Connexion refusée sur auth.sbg-energy.com.")
+        if erreur == "expired_token":
+            break
+        raise EnvoiErreur("connexion", "La connexion au compte SBG Energy a échoué.")
+    raise EnvoiErreur("expire", "Le code a expiré : recommencez la connexion.")
+
+
+async def async_revoquer(hass: HomeAssistant, jeton: str) -> None:
+    """Retire l'autorisation chez Keycloak (au mieux : l'oubli local suffit à ne plus rien envoyer)."""
+    try:
+        await _poster(hass, URL_REVOCATION, {"token": jeton, "token_type_hint": "refresh_token",
+                                             "client_id": CLIENT_ID})
+    except EnvoiErreur:
+        _LOGGER.info("Révocation du jeton chez Keycloak impossible (réseau) ; il est oublié localement")
+
+
+# ------------------------------------------------------------------ état local
+class Etat:
+    """Dernier envoi, prochain envoi permis (donné par le service), dernier renouvellement du jeton.
+    Aucun secret ici (``.storage/sbg_energy_export.envoi``)."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.envoi")
+        self.donnees: dict[str, Any] = {}
+        self._ecouteurs: list[Callable[[], None]] = []
+
+    async def async_charger(self) -> None:
+        self.donnees = await self._store.async_load() or {}
+
+    async def async_noter(self, **valeurs: Any) -> None:
+        self.donnees.update(valeurs)
+        await self._store.async_save(self.donnees)
+        for ecouteur in list(self._ecouteurs):
+            ecouteur()
+
+    def async_ecouter(self, ecouteur: Callable[[], None]) -> Callable[[], None]:
+        """Prévenu à chaque changement (capteur « Dernier envoi »)."""
+        self._ecouteurs.append(ecouteur)
+        return lambda: self._ecouteurs.remove(ecouteur)
+
+    @property
+    def prochaine(self) -> date | None:
+        p = self.donnees.get("prochaine")
+        return date.fromisoformat(p) if p else None
+
+
+# ------------------------------------------------------------------ client
+class Client:
+    """Appels au service avec un jeton d'accès frais (jamais journalisé)."""
+
+    def __init__(self, hass: HomeAssistant, entree: ConfigEntry, etat: Etat) -> None:
+        self.hass, self.entree, self.etat = hass, entree, etat
+        self._acces: str | None = None
+
+    async def async_acces(self) -> str:
+        jeton = self.entree.data.get(DATA_JETON)
+        if not jeton:
+            raise EnvoiErreur("non_connecte", "Compte SBG Energy non connecté (options de l'intégration).")
+        statut, r = await _poster(self.hass, URL_JETON, {"grant_type": "refresh_token", "refresh_token": jeton,
+                                                         "client_id": CLIENT_ID})
+        if statut == 200 and r.get("access_token"):
+            nouveau = r.get("refresh_token")
+            if nouveau and nouveau != jeton:
+                self.hass.config_entries.async_update_entry(self.entree, data={**self.entree.data, DATA_JETON: nouveau})
+            await self.etat.async_noter(renouvele=time.time())
+            self._acces = str(r["access_token"])
+            return self._acces
+        if statut in (400, 401) and r.get("error") in ("invalid_grant", "unauthorized_client", "invalid_client"):
+            # session hors ligne expirée ou autorisation retirée depuis le compte : il faut se reconnecter
+            self.hass.config_entries.async_update_entry(
+                self.entree, data={k: v for k, v in self.entree.data.items() if k != DATA_JETON})
+            raise EnvoiErreur("reconnexion", "La connexion au compte SBG Energy a expiré ou a été retirée : "
+                                             "reconnectez-la dans les options de l'intégration.")
+        raise EnvoiErreur("auth", "auth.sbg-energy.com ne répond pas correctement : réessayez plus tard.")
+
+    async def async_requete(self, methode: str, chemin: str, *, json: Any = None, params: dict[str, str] | None = None,
+                            corps: bytes | None = None, entetes: dict[str, str] | None = None) -> dict[str, Any]:
+        acces = self._acces or await self.async_acces()
+        h = {"Authorization": f"Bearer {acces}", "User-Agent": AGENT, "Accept": "application/json", **(entetes or {})}
+        if corps is not None:
+            h["Content-Type"] = "text/csv; charset=utf-8"
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.request(methode, f"{API_URL}/{chemin}", json=json, params=params, data=corps,
+                                       headers=h, timeout=aiohttp.ClientTimeout(total=DELAI_S * 2)) as r:
+                try:
+                    reponse = await r.json(content_type=None)
+                except (ValueError, aiohttp.ContentTypeError):
+                    reponse = {}
+                if not isinstance(reponse, dict):
+                    reponse = {}
+                if r.status >= 400:
+                    if r.status == 401 and reponse.get("code") == "revoque":
+                        self.hass.config_entries.async_update_entry(
+                            self.entree, data={k: v for k, v in self.entree.data.items() if k != DATA_JETON})
+                    raise EnvoiErreur(str(reponse.get("code") or r.status),
+                                      str(reponse.get("message") or f"Le service a répondu {r.status}."))
+                return reponse
+        except (aiohttp.ClientError, TimeoutError) as e:
+            raise EnvoiErreur("reseau", "analyse.sbg-energy.com injoignable : réessayez plus tard.") from e
+
+
+# ------------------------------------------------------------------ jours
+def _jours_couverts(plages: list[list[str]]) -> set[date]:
+    out: set[date] = set()
+    for a, b in plages:
+        j, fin = date.fromisoformat(a), date.fromisoformat(b)
+        while j <= fin:
+            out.add(j)
+            j += timedelta(days=1)
+    return out
+
+
+def morceaux(jours: list[date], taille: int) -> list[tuple[date, date]]:
+    """Jours triés → [(début, fin exclue)] : suites contiguës, coupées à ``taille`` jours."""
+    out: list[tuple[date, date]] = []
+    for j in sorted(jours):
+        if out and out[-1][1] == j and (out[-1][1] - out[-1][0]).days < taille:
+            out[-1] = (out[-1][0], j + timedelta(days=1))
+        else:
+            out.append((j, j + timedelta(days=1)))
+    return out
+
+
+def fin_envoyable(maintenant: datetime | None = None) -> date:
+    """Premier jour UTC NON envoyable : aujourd'hui (pas fini), et hier aussi avant 1 h UTC
+    (ses dernières statistiques ne sont pas encore compilées)."""
+    m = maintenant or datetime.now(UTC)
+    return m.date() - timedelta(days=0 if m.hour >= 1 else 1)
+
+
+@dataclass
+class Bilan:
+    """Résultat d'un envoi."""
+
+    jours: int = 0
+    ignores: int = 0
+    refuses: int = 0
+    prochaine: str | None = None
+    rapport: str | None = None
+    compte: str | None = None
+
+
+async def _envoyer_jours(hass: HomeAssistant, entree: ConfigEntry, client: Client, sid: str, mode: str, pas: int,
+                         jours: list[date], limites: dict[str, int], bilan: Bilan) -> None:
+    collecteur = entree.runtime_data.collecteur
+    if pas != 60:
+        await collecteur.async_rattraper()
+    taille = min(JOURS_PAR_MORCEAU[pas], int(limites.get("jours_max", 92)))
+    octets_max = min(OCTETS_MAX, int(limites.get("octets_max", OCTETS_MAX)))
+    a_faire = morceaux(jours, taille)
+    while a_faire:
+        debut, fin = a_faire.pop(0)
+        texte, _ = await async_texte(hass, dict(entree.options), collecteur, pas, debut, fin, rattraper=False)
+        corps = texte.encode("utf-8")
+        if len(corps) > octets_max and (fin - debut).days > 1:
+            milieu = debut + timedelta(days=(fin - debut).days // 2)
+            a_faire[:0] = [(debut, milieu), (milieu, fin)]
+            continue
+        r = await client.async_requete("POST", "import", corps=corps,
+                                       entetes={"X-SBG-Synchro": sid, "X-SBG-Mode": mode})
+        bilan.jours += len(r.get("ajoutes", [])) + len(r.get("remplaces", []))
+        bilan.ignores += len(r.get("ignores", []))
+        bilan.refuses += len(r.get("refuses", []))
+
+
+async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode: tuple[date, date] | None,
+                   manuel: bool) -> Bilan | None:
+    d = entree.runtime_data
+    etat: Etat = d.etat
+    if not actif(entree):
+        if manuel:
+            raise EnvoiErreur("desactive", "L'envoi vers analyse.sbg-energy.com est désactivé (options de "
+                                           "l'intégration) : rien n'a été envoyé.")
+        return None
+    source = entree.data.get(DATA_SOURCE)
+    pas = int(entree.options.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))
+    client = Client(hass, entree, etat)
+    j = await client.async_requete("GET", "jours", params={"source": source, "pas": str(pas)})
+    synchro = j.get("synchro") or {}
+    if mode == "complement" and not synchro.get("permise"):
+        await etat.async_noter(prochaine=synchro.get("prochaine"))
+        if manuel:
+            raise EnvoiErreur("limite_mensuelle", "Un envoi par mois au plus : prochain envoi possible le "
+                              f"{_date_fr(synchro.get('prochaine'))}.")
+        return None
+    ouverture: dict[str, Any] = {"source": source, "pas": pas, "mode": mode}
+    if periode:
+        ouverture.update(debut=periode[0].isoformat(), fin=periode[1].isoformat())
+    s = await client.async_requete("POST", "synchros", json=ouverture)
+    jour_min = date.fromisoformat(j.get("jour_min") or s.get("jour_min") or "2000-01-01")
+    fin = fin_envoyable()
+    if periode:
+        debut, fin = max(periode[0], jour_min), min(periode[1], fin)
+        jours = [debut + timedelta(days=k) for k in range(max(0, (fin - debut).days))]
+    else:
+        premier = max(await async_premier_jour(hass, dict(entree.options)), jour_min)
+        deja = _jours_couverts((j.get("couverture") or {}).get(str(pas), []))
+        jours = [premier + timedelta(days=k) for k in range(max(0, (fin - premier).days))
+                 if premier + timedelta(days=k) not in deja]
+    bilan = Bilan()
+    try:
+        await _envoyer_jours(hass, entree, client, s["id"], mode, pas, jours, j.get("morceau") or {}, bilan)
+    finally:
+        # même interrompu, la session est fermée : les jours arrivés comptent et le rapport se recalcule
+        try:
+            t = await client.async_requete("POST", f"synchros/{s['id']}/terminer")
+        except EnvoiErreur:
+            t = {}
+    bilan.prochaine = (t.get("synchro") or {}).get("prochaine")
+    bilan.rapport, bilan.compte = t.get("rapport"), t.get("compte")
+    await etat.async_noter(derniere=datetime.now(UTC).isoformat(timespec="seconds"), prochaine=bilan.prochaine,
+                           jours=bilan.jours, mode=mode)
+    return bilan
+
+
+def _date_fr(iso: str | None) -> str:
+    return date.fromisoformat(iso).strftime("%d/%m/%Y") if iso else "?"
+
+
+def _notifier(hass: HomeAssistant, texte: str) -> None:
+    persistent_notification.async_create(hass, texte, title="SBG Energy Export : envoi",
+                                         notification_id=f"{DOMAIN}_envoi")
+
+
+def _texte_bilan(b: Bilan, mode: str) -> str:
+    quoi = "remplacé(s)" if mode == "remplacement" else "envoyé(s)"
+    lignes = [f"**{b.jours} jour(s) {quoi}** à analyse.sbg-energy.com."]
+    if b.ignores:
+        lignes.append(f"{b.ignores} jour(s) déjà présents n'ont pas été renvoyés.")
+    if b.refuses:
+        lignes.append(f"{b.refuses} jour(s) refusés par le service (incomplets ou trop anciens).")
+    if b.rapport == "reglages_manquants":
+        lignes.append("Pour obtenir votre rapport, donnez votre code postal dans votre compte : "
+                      f"{b.compte or 'analyse.sbg-energy.com/home-assistant/'}")
+    elif b.rapport == "calcul":
+        lignes.append("Votre rapport se met à jour dans votre compte.")
+    if b.prochaine:
+        lignes.append(f"Prochain envoi possible le {_date_fr(b.prochaine)}.")
+    return "\n\n".join(lignes)
+
+
+async def async_synchroniser(hass: HomeAssistant, entree: ConfigEntry, manuel: bool = False) -> Bilan | None:
+    """Envoie les jours manquants. ``manuel`` : bouton ou service (erreur montrée à l'utilisateur)."""
+    try:
+        bilan = await _session(hass, entree, "complement", None, manuel)
+    except EnvoiErreur as e:
+        _LOGGER.warning("Envoi SBG Energy non fait : %s", e.message)
+        _notifier(hass, f"Rien n'a été envoyé : {e.message}")
+        raise
+    if bilan is not None:
+        _LOGGER.info("Envoi SBG Energy : %d jour(s) envoyé(s)", bilan.jours)
+        _notifier(hass, _texte_bilan(bilan, "complement"))
+    return bilan
+
+
+async def async_reimporter(hass: HomeAssistant, entree: ConfigEntry, debut: date, fin: date) -> Bilan:
+    """Renvoie [debut, fin[ et REMPLACE ces jours côté service."""
+    if fin <= debut:
+        raise EnvoiErreur("periode", "La fin doit suivre le début.")
+    try:
+        bilan = await _session(hass, entree, "remplacement", (debut, fin), True)
+    except EnvoiErreur as e:
+        _LOGGER.warning("Réimport SBG Energy non fait : %s", e.message)
+        _notifier(hass, f"Réimport non fait : {e.message}")
+        raise
+    assert bilan is not None
+    _notifier(hass, _texte_bilan(bilan, "remplacement"))
+    return bilan
+
+
+async def async_tache_quotidienne(hass: HomeAssistant, entree: ConfigEntry) -> None:
+    """Chaque jour, à une heure propre à l'installation : rien si l'envoi est désactivé ; sinon
+    l'envoi du mois quand le service le permet, ou au moins le renouvellement hebdomadaire du jeton."""
+    if not actif(entree):
+        return
+    etat: Etat = entree.runtime_data.etat
+    p = etat.prochaine
+    try:
+        if p is None or datetime.now(UTC).date() >= p:
+            await async_synchroniser(hass, entree)
+        elif time.time() - float(etat.donnees.get("renouvele", 0)) > RENOUVELER_JETON_J * 86400:
+            await Client(hass, entree, etat).async_acces()
+    except EnvoiErreur:
+        pass  # déjà noté et notifié ; on réessaie demain
+
+
+def heure_quotidienne(source: str | None) -> tuple[int, int]:
+    """Heure locale de la tâche, entre 3 h et 5 h 59, tirée de l'identifiant aléatoire (étale la charge)."""
+    n = int((source or "0" * 8)[:8], 16)
+    return 3 + n % 3, (n // 3) % 60

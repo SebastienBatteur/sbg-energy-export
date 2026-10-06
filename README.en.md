@@ -6,8 +6,10 @@ Exports the data of the Home Assistant **Energy dashboard** to the open **"SBG H
 format ([specification, in French](docs/FORMAT_SBG_HA_EXPORT.md)), so that you can upload it
 yourself to an analysis service such as analyse.sbg-energy.com.
 
-- **Nothing is sent anywhere.** The integration makes no outbound network call: you download the
-  file from your own Home Assistant and upload it wherever you choose.
+- **Nothing is sent anywhere, by default.** You download the export from your own Home Assistant
+  and upload it wherever you choose. **Direct sending** to analyse.sbg-energy.com
+  ([below](#direct-sending-to-analysesbg-energycom-optional-off-by-default)) is **off by default**:
+  only if you turn it on and connect your SBG Energy account.
 - **Only what is needed**: grid (import, export), solar, battery (charge, discharge), home
   consumption, and the devices **you** choose (all, none, or a selection) under a neutral name
   (`voiture_1`, `pac_1`…). No device name, room, entity ID or location.
@@ -16,7 +18,7 @@ yourself to an analysis service such as analyse.sbg-energy.com.
   integration picks up those ~10 days at installation, then records every quarter-hour (or,
   optionally, every 5-minute period) as it goes.
 
-> Status: **version 0.2.0, not published yet**. Name, licence and publication still to be decided.
+> Status: **version 0.3.0, not published yet**. Name, licence and publication still to be decided.
 
 ## What the export contains
 
@@ -73,6 +75,46 @@ The file also stays in `<config>/sbg_energy_export/exports/`.
 
 The **Last recorded quarter-hour** diagnostic sensor shows that recording is running (attribute:
 first recorded quarter-hour).
+
+## Direct sending to analyse.sbg-energy.com (optional, off by default)
+
+Instead of downloading the file and uploading it yourself, the integration can send it **by
+itself** to SBG Energy's analysis service. **Nothing is sent until you turn it on AND connect
+your account.** It is the integration's **only outgoing network call**.
+
+1. **Configure** → last step **"Send to analyse.sbg-energy.com"** → tick **Send to
+   analyse.sbg-energy.com**, choose the step (15 min or hourly; 5 min with the 5-minute option).
+2. The screen shows a **link** and a **code**: open the link (phone or computer), sign in to your
+   **SBG Energy account** (with your 6-digit code), enter the code and accept. That's all: **once**.
+   - No password or secret is stored in Home Assistant: only a revocable **token**, kept in the
+     config entry and never written to the logs.
+3. Give your **postcode** in your account (**Home Assistant** page of analyse.sbg-energy.com) so
+   that the report can be computed.
+
+What is sent, and when:
+
+- **The same content as the manual export**: the chosen devices, no entity name, at the chosen
+  step; complete UTC days only.
+- **At most one automatic send per month**, from the 2nd (the past month, plus any missing day);
+  the first time, **the whole available history** (3 years at most). Before each send, the
+  integration asks the service which days it already has and **sends only the missing ones**. The
+  limit is **enforced by the service**: the **Send now** button (and the
+  `sbg_energy_export.envoyer` action) is subject to it too.
+- **Re-import** (`sbg_energy_export.reimporter` action, fields `debut` and `fin`, UTC dates, end
+  excluded): sends the period again and **replaces** those days at the service. **3 times per
+  month** at most.
+- Once a week the integration renews its token at **auth.sbg-energy.com** (no data at all);
+  otherwise the connection would expire after 30 days unused.
+
+What the service does with it: **the report in your account**, updated at each send, and a
+**"better offer" e-mail alert** (no consumption data in it). Data kept **3 rolling years**,
+erasable from your account, erased if you delete your account. **Free during the beta.**
+Conditions (French): <https://analyse.sbg-energy.com/conditions/#home-assistant>.
+
+To stop: untick sending, or **Disconnect my SBG Energy account** in the same step. From your
+account you can also **disconnect Home Assistant** and **erase** what was sent.
+
+The **Last send** diagnostic sensor shows the date of the last send.
 
 ## What is stored on your system
 

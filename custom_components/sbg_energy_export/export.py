@@ -5,8 +5,10 @@ Le passé vient des statistiques à long terme (horaires, gardées pour toujours
 le pas fin (15 min, ou 5 min si l'option est choisie) vient des
 enregistrements du collecteur : ~10 jours avant l'installation, puis en continu. Le fichier est écrit dans
 ``<config>/sbg_energy_export/exports/`` et se télécharge par un lien signé,
-servi par Home Assistant lui-même et valable une heure. Rien n'est envoyé
-ailleurs : l'utilisateur dépose le fichier lui-même sur analyse.sbg-energy.com.
+servi par Home Assistant lui-même et valable une heure. L'export manuel n'envoie
+rien : l'utilisateur dépose le fichier lui-même sur analyse.sbg-energy.com.
+L'envoi direct (``envoi.py``, désactivé par défaut) produit le MÊME texte, par
+jours entiers, avec ``async_texte``.
 """
 from __future__ import annotations
 
@@ -35,7 +37,7 @@ from .const import (
     VALIDITE_LIEN_H,
     VERSION,
 )
-from .sbg_format import depuis_preferences, en_secondes, exporter
+from .sbg_format import Configuration, depuis_preferences, en_secondes, exporter
 
 URL_FICHIER = f"/api/{DOMAIN}/fichier"
 NOM_VALIDE = re.compile(r"^sbg_ha_export_\d{8}-\d{6}_(5|15|60)min\.csv$")
@@ -67,31 +69,47 @@ async def async_premier_instant(hass: HomeAssistant, ids: set[str], fin: int) ->
     return min(debuts) + 3600 if debuts else fin - 86400
 
 
-async def async_exporter(
-    hass: HomeAssistant,
-    options: dict[str, Any],
-    collecteur: Collecteur,
-    dossier: Path,
-    pas: int = 15,
-    debut: date | None = None,
-    fin: date | None = None,
-) -> Resultat:
-    """Écrit le fichier et rend son chemin et un lien de téléchargement signé."""
-    if pas == 5 and not options.get(OPT_CINQ_MINUTES):
-        raise HomeAssistantError("Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes ».")
+async def async_configuration(hass: HomeAssistant, options: dict[str, Any]) -> Configuration:
+    """Ce que l'export contient : sources du tableau Énergie et appareils choisis."""
     prefs = (await async_get_manager(hass)).data
     if not prefs:
         raise HomeAssistantError("Le tableau Énergie n'est pas configuré.")
     config = depuis_preferences(prefs, appareils_choisis(prefs, options), options.get(OPT_CATEGORIES, {}))
     if not config.roles:
         raise HomeAssistantError("Le tableau Énergie n'a ni réseau, ni solaire, ni batterie.")
+    return config
+
+
+async def async_premier_jour(hass: HomeAssistant, options: dict[str, Any]) -> date:
+    """Premier jour UTC COMPLET exportable (l'envoi direct n'envoie que des jours entiers)."""
+    config = await async_configuration(hass, options)
+    maintenant = int(time.time())
+    t = await async_premier_instant(hass, config.statistiques(), maintenant - maintenant % 3600)
+    t += -t % 86400
+    return datetime.fromtimestamp(t, timezone.utc).date()
+
+
+async def async_texte(
+    hass: HomeAssistant,
+    options: dict[str, Any],
+    collecteur: Collecteur,
+    pas: int,
+    debut: date | None,
+    fin: date | None,
+    rattraper: bool = True,
+) -> tuple[str, int]:
+    """Texte « SBG HA export » de ``debut`` (inclus) à ``fin`` (exclue), et l'instant de génération.
+    Utilisé par l'export manuel ET par l'envoi direct : le contenu est exactement le même."""
+    if pas == 5 and not options.get(OPT_CINQ_MINUTES):
+        raise HomeAssistantError("Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes ».")
+    config = await async_configuration(hass, options)
     ids = config.statistiques()
     maintenant = int(time.time())
     t_fin = _jour(fin) if fin else maintenant - maintenant % 3600
     t_debut = _jour(debut) if debut else await async_premier_instant(hass, ids, t_fin)
     if t_fin <= t_debut:
         raise HomeAssistantError("La fin doit suivre le début.")
-    if pas != 60:
+    if pas != 60 and rattraper:
         await collecteur.async_rattraper()
     horaires: dict[str, list[dict[str, Any]]] = {s: [] for s in ids}
     t = t_debut - 3600  # la ligne qui précède donne l'énergie de la première heure
@@ -105,6 +123,20 @@ async def async_exporter(
         exporter, config, horaires, t_debut, t_fin, pas, str(hass.config.time_zone),
         f"{DOMAIN} {VERSION}", maintenant, mesures,
     )
+    return texte, maintenant
+
+
+async def async_exporter(
+    hass: HomeAssistant,
+    options: dict[str, Any],
+    collecteur: Collecteur,
+    dossier: Path,
+    pas: int = 15,
+    debut: date | None = None,
+    fin: date | None = None,
+) -> Resultat:
+    """Écrit le fichier et rend son chemin et un lien de téléchargement signé."""
+    texte, maintenant = await async_texte(hass, options, collecteur, pas, debut, fin)
     nom = f"sbg_ha_export_{datetime.fromtimestamp(maintenant, timezone.utc):%Y%m%d-%H%M%S}_{pas}min.csv"
     chemin = dossier / SOUS_DOSSIER_EXPORTS / nom
     await hass.async_add_executor_job(_ecrire, chemin, texte)

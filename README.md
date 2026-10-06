@@ -6,8 +6,10 @@ Exporte les données du **tableau de bord Énergie** de Home Assistant au format
 **« SBG HA export »** ([spécification](docs/FORMAT_SBG_HA_EXPORT.md)), pour les déposer vous-même
 sur un service d'analyse comme analyse.sbg-energy.com.
 
-- **Rien n'est envoyé nulle part.** L'intégration ne fait aucun appel réseau sortant : vous
-  téléchargez le fichier depuis votre Home Assistant et vous le déposez où vous voulez.
+- **Rien n'est envoyé nulle part, par défaut.** L'export se télécharge depuis votre Home
+  Assistant et vous le déposez où vous voulez. L'**envoi direct** à analyse.sbg-energy.com
+  ([plus bas](#envoi-direct-à-analysesbg-energycom-facultatif-désactivé-par-défaut)) est
+  **désactivé par défaut** : seulement si vous l'activez et connectez votre compte SBG Energy.
 - **Le strict nécessaire** : réseau (prélèvement, injection), solaire, batterie (charge,
   décharge), consommation de la maison, et les appareils que **vous** choisissez (tous, aucun,
   ou une sélection), sous un nom neutre (`voiture_1`, `pac_1`…). Ni nom d'appareil, ni pièce, ni
@@ -17,7 +19,7 @@ sur un service d'analyse comme analyse.sbg-energy.com.
   L'intégration reprend ces ~10 jours à l'installation, puis enregistre chaque quart d'heure (ou,
   en option, chaque période de 5 minutes) au fil de l'eau.
 
-> Statut : **version 0.2.0, pas encore publiée**. Nom, licence et publication à décider.
+> Statut : **version 0.3.0, pas encore publiée**. Nom, licence et publication à décider.
 
 ## Ce que contient l'export
 
@@ -78,6 +80,53 @@ heure. Le fichier reste dans `<config>/sbg_energy_export/exports/`.
 Le capteur de diagnostic **Dernier quart d'heure enregistré** montre que l'enregistrement tourne
 (attribut : premier quart d'heure enregistré).
 
+## Envoi direct à analyse.sbg-energy.com (facultatif, désactivé par défaut)
+
+Au lieu de télécharger le fichier et de le déposer vous-même, l'intégration peut l'envoyer
+**elle-même** au service d'analyse de SBG Energy. **Rien ne part tant que vous ne l'avez pas
+activé ET connecté votre compte.** C'est le **seul appel réseau sortant** de l'intégration.
+
+1. **Configurer** → dernière étape **« Envoi à analyse.sbg-energy.com »** → cocher **Envoyer à
+   analyse.sbg-energy.com**, choisir le pas (15 min ou horaire ; 5 min avec l'option des
+   5 minutes).
+2. L'écran affiche un **lien** et un **code** : ouvrez le lien (sur votre téléphone ou votre
+   ordinateur), connectez-vous à votre **compte SBG Energy** (avec votre code à 6 chiffres),
+   saisissez le code et acceptez. C'est tout : **une seule fois**.
+   - Aucun mot de passe ni secret n'est enregistré dans Home Assistant : seulement un **jeton**
+     (un « laissez-passer » révocable) gardé dans l'entrée de configuration, jamais écrit dans
+     les journaux.
+3. Donnez votre **code postal** dans votre compte (page **Home Assistant** de
+   analyse.sbg-energy.com) pour que le rapport se calcule.
+
+Ce qui part, et quand :
+
+- **Le même contenu que l'export manuel** : les appareils choisis, sans nom d'entité, au pas
+  choisi ; jours UTC complets seulement.
+- **Au plus un envoi automatique par mois**, à partir du 2 (le mois écoulé, et les jours qui
+  manqueraient) ; la première fois, **tout l'historique** disponible (3 ans au plus). Avant
+  chaque envoi, l'intégration demande au service les jours qu'il a déjà, et **n'envoie que les
+  manquants**. La limite est **imposée par le service** : le bouton **Envoyer maintenant** (et le
+  service `sbg_energy_export.envoyer`) y est soumis aussi.
+- **Réimporter** (service `sbg_energy_export.reimporter`, champs `debut` et `fin`, dates UTC, fin
+  exclue) : renvoie la période et **remplace** ces jours côté service (par exemple après avoir
+  corrigé une statistique). **3 fois par mois** au plus.
+- Une fois par semaine, l'intégration renouvelle son jeton auprès de **auth.sbg-energy.com**
+  (sans aucune donnée) : sans cela, la connexion expirerait après 30 jours sans usage.
+
+Ce que le service en fait : **le rapport de votre compte**, mis à jour à chaque envoi, et une
+**alerte « meilleure offre »** par e-mail (sans aucune donnée de consommation) quand une offre
+analysée est moins chère que votre contrat d'au moins 40 € et 5 % par an, deux mois de suite.
+Données gardées **3 ans glissants**, effaçables depuis votre compte, effacées si vous supprimez
+votre compte. **Gratuit pendant la bêta.** Conditions :
+<https://analyse.sbg-energy.com/conditions/#home-assistant>.
+
+Arrêter : décocher l'envoi (plus rien ne part), ou **Déconnecter mon compte SBG Energy** dans la
+même étape (le jeton est oublié et retiré chez SBG Energy). Depuis votre compte, vous pouvez
+aussi **déconnecter Home Assistant** et **effacer** ce qui a été envoyé.
+
+Le capteur de diagnostic **Dernier envoi** donne la date du dernier envoi (attributs : prochain
+envoi permis, jours envoyés).
+
 ## Ce qui est stocké chez vous
 
 - `<config>/sbg_energy_export/mesures/mesures_15min_AAAA-MM.csv` (ou `mesures_5min_…`) : un
@@ -99,6 +148,7 @@ Le capteur de diagnostic **Dernier quart d'heure enregistré** montre que l'enre
   précis que le Wh).
 - `<config>/sbg_energy_export/exports/` : les exports produits (à supprimer quand vous voulez).
 - `.storage/sbg_energy_export.collecteur` : la dernière période traitée, les statistiques suivies.
+- `.storage/sbg_energy_export.envoi` (envoi direct seulement) : date du dernier envoi et du prochain permis ; le jeton est dans l'entrée de configuration (`.storage/core.config_entries`), comme pour les autres intégrations.
 
 Au démarrage, l'intégration rattrape les périodes manquantes tant que Home Assistant a encore
 leurs statistiques de 5 minutes (~10 jours) : un arrêt plus long laisse un trou, rempli à l'export

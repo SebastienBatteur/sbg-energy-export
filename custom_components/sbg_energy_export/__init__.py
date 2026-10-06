@@ -8,25 +8,41 @@
   conservation réglable (3 ans par défaut).
 * Un service et des boutons « Exporter » écrivent le fichier : le passé en
   horaire (statistiques à long terme), le pas fin là où il est enregistré.
-* Aucun appel réseau sortant : le fichier se télécharge depuis Home Assistant
-  et l'utilisateur le dépose lui-même où il veut.
+* Export manuel : aucun appel réseau sortant ; le fichier se télécharge depuis
+  Home Assistant et l'utilisateur le dépose lui-même où il veut.
+* Envoi direct vers analyse.sbg-energy.com (``envoi.py``) : DÉSACTIVÉ par défaut ;
+  seulement si l'utilisateur l'active et connecte son compte SBG Energy. C'est le
+  seul appel réseau sortant de l'intégration.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_call_later, async_track_time_change
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
+from . import envoi
 from .collecteur import Collecteur
-from .const import ATTR_DEBUT, ATTR_FIN, ATTR_PAS, DOMAIN, DOSSIER, SERVICE_EXPORTER
+from .const import (
+    ATTR_DEBUT,
+    ATTR_FIN,
+    ATTR_PAS,
+    DATA_SOURCE,
+    DOMAIN,
+    DOSSIER,
+    SERVICE_ENVOYER,
+    SERVICE_EXPORTER,
+    SERVICE_REIMPORTER,
+)
 from .export import Resultat, VueFichier, async_exporter
 
 PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SENSOR]
@@ -39,6 +55,8 @@ SCHEMA_EXPORTER = vol.Schema(
         vol.Optional(ATTR_FIN): cv.date,
     }
 )
+SCHEMA_REIMPORTER = vol.Schema({vol.Required(ATTR_DEBUT): cv.date, vol.Required(ATTR_FIN): cv.date})
+PREMIER_ENVOI_S = 120  # premier envoi après la connexion : laisser le collecteur rattraper
 
 
 @dataclass
@@ -47,6 +65,8 @@ class Donnees:
 
     collecteur: Collecteur
     dossier: Path
+    etat: envoi.Etat
+    options: dict[str, Any]  # options au chargement : un jeton renouvelé ne recharge pas l'entrée
 
 
 type SbgConfigEntry = ConfigEntry[Donnees]
@@ -71,7 +91,28 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         schema=SCHEMA_EXPORTER,  # type: ignore[arg-type]  # voluptuous = alias de probatio depuis 2026.9
         supports_response=SupportsResponse.OPTIONAL,
     )
+
+    async def envoyer_service(appel: ServiceCall) -> ServiceResponse:
+        r = await envoi.async_synchroniser(hass, _entree(hass), manuel=True)
+        return {"jours": r.jours if r else 0, "prochaine": r.prochaine if r else None}
+
+    async def reimporter_service(appel: ServiceCall) -> ServiceResponse:
+        r = await envoi.async_reimporter(hass, _entree(hass), appel.data[ATTR_DEBUT], appel.data[ATTR_FIN])
+        return {"jours": r.jours, "prochaine": r.prochaine}
+
+    hass.services.async_register(DOMAIN, SERVICE_ENVOYER, envoyer_service,
+                                 supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, SERVICE_REIMPORTER, reimporter_service,
+                                 schema=SCHEMA_REIMPORTER,  # type: ignore[arg-type]
+                                 supports_response=SupportsResponse.OPTIONAL)
     return True
+
+
+def _entree(hass: HomeAssistant) -> SbgConfigEntry:
+    entrees: list[SbgConfigEntry] = hass.config_entries.async_loaded_entries(DOMAIN)
+    if not entrees:
+        raise HomeAssistantError("SBG Energy Export n'est pas configuré.")
+    return entrees[0]
 
 
 async def async_exporter_et_notifier(
@@ -97,15 +138,35 @@ async def async_setup_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> bool
     dossier = Path(hass.config.path(DOSSIER))
     collecteur = Collecteur(hass, dossier, entree.options)
     await collecteur.async_demarrer()
-    entree.runtime_data = Donnees(collecteur, dossier)
+    etat = envoi.Etat(hass)
+    await etat.async_charger()
+    entree.runtime_data = Donnees(collecteur, dossier, etat, dict(entree.options))
     entree.async_on_unload(collecteur.async_arreter)
     entree.async_on_unload(entree.add_update_listener(_async_options_modifiees))
     entree.async_create_background_task(hass, collecteur.async_rattraper(), f"{DOMAIN}_rattrapage")
     await hass.config_entries.async_forward_entry_setups(entree, PLATFORMS)
+    _programmer_envoi(hass, entree)
     return True
 
 
+def _programmer_envoi(hass: HomeAssistant, entree: SbgConfigEntry) -> None:
+    """Tâche quotidienne (elle ne fait rien tant que l'envoi est désactivé), et premier envoi
+    peu après la connexion du compte."""
+    heure, minute = envoi.heure_quotidienne(entree.data.get(DATA_SOURCE))
+
+    @callback
+    def lancer(_maintenant: Any = None) -> None:
+        entree.async_create_background_task(hass, envoi.async_tache_quotidienne(hass, entree), f"{DOMAIN}_envoi")
+
+    entree.async_on_unload(async_track_time_change(hass, lancer, hour=heure, minute=minute, second=0))
+    if envoi.actif(entree) and not entree.runtime_data.etat.donnees.get("derniere"):
+        entree.async_on_unload(async_call_later(hass, PREMIER_ENVOI_S, lancer))
+
+
 async def _async_options_modifiees(hass: HomeAssistant, entree: SbgConfigEntry) -> None:
+    # Le jeton de rafraîchissement renouvelé est écrit dans entree.data : pas de rechargement pour ça.
+    if dict(entree.options) == entree.runtime_data.options:
+        return
     await hass.config_entries.async_reload(entree.entry_id)
 
 

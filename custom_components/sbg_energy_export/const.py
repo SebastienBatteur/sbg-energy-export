@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "sbg_energy_export"
-VERSION: Final = "0.2.0"
+VERSION: Final = "0.3.0"
 
 # Dossier de travail, dans le dossier de configuration de Home Assistant.
 DOSSIER: Final = "sbg_energy_export"
@@ -34,3 +34,26 @@ ATTR_FIN: Final = "fin"
 # compilées quelques secondes après chaque période de 5 min).
 DELAI_QUART_S: Final = 120
 VALIDITE_LIEN_H: Final = 1
+
+# Envoi direct vers analyse.sbg-energy.com (version 0.3.0, ADR-038). DÉSACTIVÉ par
+# défaut : seul appel réseau sortant de l'intégration, et seulement si le client
+# l'active ET connecte son compte SBG Energy (flux « Device Authorization Grant »
+# de Keycloak, client PUBLIC : aucun mot de passe ni secret dans Home Assistant).
+OPT_ENVOI: Final = "envoi_actif"
+OPT_PAS_ENVOI: Final = "pas_envoi"
+OPT_DECONNECTER: Final = "deconnecter"
+PAS_ENVOI_DEFAUT: Final = 15
+DATA_JETON: Final = "jeton_rafraichissement"   # jeton de rafraîchissement (jamais journalisé)
+DATA_SOURCE: Final = "source"                   # identifiant ALÉATOIRE de cette installation
+AUTH_URL: Final = "https://auth.sbg-energy.com/realms/sbg"
+API_URL: Final = "https://analyse.sbg-energy.com/api/v1/ha"
+CLIENT_ID: Final = "sbg-ha-export"
+PORTEES: Final = "offline_access ha-export"
+SERVICE_ENVOYER: Final = "envoyer"
+SERVICE_REIMPORTER: Final = "reimporter"
+# Jours par morceau envoyé (le service en accepte 92 au plus, 1 Mo au plus).
+JOURS_PAR_MORCEAU: Final = {5: 10, 15: 31, 60: 92}
+OCTETS_MAX: Final = 900_000
+# Le jeton de rafraîchissement hors ligne expire s'il n'est pas utilisé pendant 30 jours
+# (réglage du royaume) : il est renouvelé chaque semaine (appel à auth.sbg-energy.com seul).
+RENOUVELER_JETON_J: Final = 7

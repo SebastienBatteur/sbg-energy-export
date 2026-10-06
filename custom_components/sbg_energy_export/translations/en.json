@@ -56,7 +56,35 @@
       "categories": {
         "title": "Categories",
         "description": "Choose each device's category (suggested from its name, its Home Assistant device and its typical power)."
+      },
+      "envoi": {
+        "title": "Send to analyse.sbg-energy.com",
+        "description": "**Off by default.** When on, the integration sends the SAME content as the manual export (grid, solar, battery, house consumption and only the devices you chose, under a neutral name, at the chosen step) to analyse.sbg-energy.com, at most once a month (from the 2nd), only the days the service does not have yet. It is the integration's only outgoing network call. Purpose: the report in your SBG Energy account, updated at each send, and the \"better offer\" e-mail alert. Data kept 3 rolling years, erasable from your account; free during the beta. Conditions: https://analyse.sbg-energy.com/conditions/#home-assistant\n\nSBG Energy account: {compte}.",
+        "data": {
+          "envoi_actif": "Send to analyse.sbg-energy.com",
+          "pas_envoi": "Step sent (minutes)",
+          "deconnecter": "Disconnect my SBG Energy account"
+        },
+        "data_description": {
+          "envoi_actif": "Ticking it starts the connection to your SBG Energy account: a code to enter on auth.sbg-energy.com. No password is stored in Home Assistant.",
+          "pas_envoi": "5 only with the \"finest step: 5 minutes\" option.",
+          "deconnecter": "Forgets the connection here and withdraws it at SBG Energy; nothing is sent anymore."
+        }
+      },
+      "connexion": {
+        "title": "Connect your SBG Energy account",
+        "description": "Open {url} and enter the code **{code}**, then sign in to your SBG Energy account (with your 6-digit code) and accept. This screen closes by itself (10 minutes at most)."
       }
+    },
+    "progress": {
+      "connexion": "Open {url} and enter the code **{code}**. Waiting for your approval…"
+    },
+    "abort": {
+      "auth_injoignable": "auth.sbg-energy.com cannot be reached: nothing was enabled. Try again later.",
+      "connexion_echouee": "Connection not completed: {message} Nothing was enabled."
+    },
+    "error": {
+      "pas_5_sans_option": "The 5-minute step needs the \"finest step: 5 minutes\" option."
     }
   },
   "selector": {
@@ -79,6 +107,13 @@
         "eclairage": "Lighting",
         "autre": "Other"
       }
+    },
+    "pas_envoi": {
+      "options": {
+        "5": "5 minutes",
+        "15": "15 minutes",
+        "60": "Hourly"
+      }
     }
   },
   "entity": {
@@ -91,6 +126,9 @@
       },
       "exporter_60": {
         "name": "Export (hourly)"
+      },
+      "envoyer": {
+        "name": "Send now"
       }
     },
     "sensor": {
@@ -99,6 +137,17 @@
         "state_attributes": {
           "premier_quart": {
             "name": "First quarter-hour"
+          }
+        }
+      },
+      "dernier_envoi": {
+        "name": "Last send",
+        "state_attributes": {
+          "prochain_envoi": {
+            "name": "Next send allowed"
+          },
+          "jours_envoyes": {
+            "name": "Days sent"
           }
         }
       }
@@ -120,6 +169,24 @@
         "fin": {
           "name": "End",
           "description": "End day, excluded (UTC). Default: current hour."
+        }
+      }
+    },
+    "envoyer": {
+      "name": "Send now",
+      "description": "Sends the missing days to analyse.sbg-energy.com (only if sending is enabled and your account connected). The service accepts one send per month."
+    },
+    "reimporter": {
+      "name": "Re-import a period",
+      "description": "Sends the chosen days again and REPLACES them at analyse.sbg-energy.com (3 times per month at most).",
+      "fields": {
+        "debut": {
+          "name": "Start",
+          "description": "First day (UTC)."
+        },
+        "fin": {
+          "name": "End",
+          "description": "End day, excluded (UTC)."
         }
       }
     }

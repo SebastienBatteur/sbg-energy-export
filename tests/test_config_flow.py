@@ -98,7 +98,13 @@ async def test_options_tous(hass: HomeAssistant) -> None:
     assert r["step_id"] == "categories"
     r = await hass.config_entries.options.async_configure(
         r["flow_id"], {"sensor.borne_voiture": "voiture", "sensor.boiler": "ballon", "sensor.frigo": "autre"})
+    # dernière étape : l'envoi direct, désactivé par défaut (rien ne part sans le cocher)
+    assert (r["type"], r["step_id"]) == (FlowResultType.FORM, "envoi")
+    schema = {str(k): k.default() for k in r["data_schema"].schema}
+    assert schema["envoi_actif"] is False and "deconnecter" not in schema
+    r = await hass.config_entries.options.async_configure(r["flow_id"], {"envoi_actif": False, "pas_envoi": "15"})
     assert r["type"] is FlowResultType.CREATE_ENTRY
+    assert entree.options["envoi_actif"] is False
     assert entree.options["choix"] == "tous"
     assert entree.options["categories"]["sensor.frigo"] == "autre"
     assert entree.options["conservation_ans"] == 3 and entree.options["pas_5min"] is False

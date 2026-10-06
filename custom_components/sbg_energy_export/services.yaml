@@ -14,3 +14,14 @@ exporter:
     fin:
       selector:
         date:
+envoyer:
+reimporter:
+  fields:
+    debut:
+      required: true
+      selector:
+        date:
+    fin:
+      required: true
+      selector:
+        date:
