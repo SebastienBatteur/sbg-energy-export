@@ -186,3 +186,49 @@ def test_exporter_cinq_minutes():
     assert corps[13] == "2026-01-05T11:00:00Z,mesure_5min,0.05,,,,,0.05,0"
     # le même jeu au pas de 15 et 60 min ne change pas : clé d'origine
     assert "# debut_mesure_15min: aucun" in F.exporter(c, horaires, T0, T0 + 2 * H, 60, "UTC", "t", T0)
+
+
+def test_version_2_compacte_passe_horaire_et_heure_inconnue():
+    """Version 2 (0.5.0) : une heure sans mesure au pas fin reste en UNE ligne horaire ;
+    une heure inconnue est une ligne « trou_60min » ; seules les heures mesurées sont au pas fin."""
+    c = F.Configuration({F.PRELEVEMENT: ["p"]}, [F.Appareil("v", "voiture")])
+    # heure 0 connue, heure 1 inconnue (ligne de statistiques absente), heure 2 connue, heure 3 mesurée
+    horaires = {"p": cumuls(T0, H, [1.2, None, 0.6, 0.6]), "v": cumuls(T0, H, [0.1, None, 0.1, 0.0])}
+    mesures = {"p": {T0 + 3 * H + 300 * k: 0.05 for k in range(11)}, "v": {T0 + 3 * H + 300 * k: 0.0 for k in range(11)}}
+    texte = F.exporter(c, horaires, T0, T0 + 4 * H, 5, "UTC", "test 0", T0 + 5 * H, mesures, compact=True)
+    assert "# version: 2\n" in texte and "# pas_minutes: 5\n" in texte
+    assert "# debut: 2026-01-05T10:00:00Z\n# fin: 2026-01-05T14:00:00Z\n" in texte
+    corps = [l for l in texte.splitlines() if not l.startswith("#")]
+    assert corps[1:4] == ["2026-01-05T10:00:00Z,mesure_60min,1.2,,,,,1.2,0.1",
+                          "2026-01-05T11:00:00Z,trou_60min,,,,,,,",
+                          "2026-01-05T12:00:00Z,trou_60min,,,,,,,"]  # l'heure qui suit un trou est inconnue
+    assert corps[4] == "2026-01-05T13:00:00Z,mesure_5min,0.05,,,,,0.05,0"
+    assert corps[-1] == "2026-01-05T13:55:00Z,trou,,,,,,,"  # période manquante d'une heure mesurée
+    assert len(corps) == 1 + 3 + 12
+    assert "heure_repartie" not in texte
+
+
+def test_version_2_ligne_horaire_connue_puis_fin():
+    c = F.Configuration({F.PRELEVEMENT: ["p"]})
+    horaires = {"p": cumuls(T0, H, [1.0, 2.0])}
+    texte = F.exporter(c, horaires, T0, T0 + 2 * H, 15, "UTC", "t", T0, {}, compact=True)
+    corps = [l for l in texte.splitlines() if not l.startswith("#")]
+    assert corps[1:] == ["2026-01-05T10:00:00Z,mesure_60min,1,,,,,1",
+                         "2026-01-05T11:00:00Z,mesure_60min,2,,,,,2"]
+    assert "# fin: 2026-01-05T12:00:00Z\n" in texte and "# debut_mesure_15min: aucun\n" in texte
+
+
+def test_pas_horaire_reste_en_version_1():
+    """Au pas de 60 min, les deux versions donnent le même fichier : il reste en version 1."""
+    c = F.Configuration({F.PRELEVEMENT: ["p"]})
+    horaires = {"p": cumuls(T0, H, [1.0, 2.0])}
+    assert F.exporter(c, horaires, T0, T0 + 2 * H, 60, "UTC", "t", T0, compact=True) == \
+        F.exporter(c, horaires, T0, T0 + 2 * H, 60, "UTC", "t", T0)
+
+
+def test_nouvelles_categories_ventilation_et_pompe():
+    c = F.Configuration({F.PRELEVEMENT: ["p"]}, [F.Appareil("a", "ventilation"), F.Appareil("b", "pompe"),
+                                                 F.Appareil("d", "pompe")])
+    assert [x.nom for x in c.colonnes()] == ["ventilation_1", "pompe_1", "pompe_2"]
+    with pytest.raises(ValueError):
+        F.Configuration({F.PRELEVEMENT: ["p"]}, [F.Appareil("a", "portail")]).colonnes()

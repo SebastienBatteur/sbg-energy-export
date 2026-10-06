@@ -7,8 +7,16 @@ enregistrements du collecteur : ~10 jours avant l'installation, puis en continu.
 ``<config>/sbg_energy_export/exports/`` et se télécharge par un lien signé,
 servi par Home Assistant lui-même et valable une heure. L'export manuel n'envoie
 rien : l'utilisateur dépose le fichier lui-même sur analyse.sbg-energy.com.
-L'envoi direct (``envoi.py``, désactivé par défaut) produit le MÊME texte, par
-jours entiers, avec ``async_texte``.
+L'envoi direct (``envoi.py``, désactivé par défaut) produit le même contenu, par
+jours entiers, avec ``async_texte``, mais en version 1 du format.
+
+Depuis 0.5.0, l'export manuel est en **version 2** du format (le passé connu seulement à
+l'heure reste en lignes horaires au lieu d'être découpé en 4 ou 12 parts égales) et
+**compressé dans une archive ZIP** (un seul CSV dedans). Un vrai export de trois ans au
+pas de 5 min avec plus de 20 appareils faisait 47,6 Mo, au-delà des 40 Mo du formulaire du
+service. Le formulaire d'analyse.sbg-energy.com accepte le ZIP tel quel, et il s'ouvre
+partout d'un double clic. L'envoi direct garde la version 1 : le service range chaque
+jour reçu avec toutes ses lignes au pas de la session.
 """
 from __future__ import annotations
 
@@ -19,6 +27,7 @@ from pathlib import Path
 import re
 import time
 from typing import Any
+import zipfile
 
 from aiohttp import web
 from homeassistant.components.energy.data import async_get_manager
@@ -40,7 +49,7 @@ from .const import (
 from .sbg_format import Configuration, depuis_preferences, en_secondes, exporter
 
 URL_FICHIER = f"/api/{DOMAIN}/fichier"
-NOM_VALIDE = re.compile(r"^sbg_ha_export_\d{8}-\d{6}_(5|15|60)min\.csv$")
+NOM_VALIDE = re.compile(r"^sbg_ha_export_\d{8}-\d{6}_(5|15|60)min\.(csv|zip)$")  # .csv : exports d'avant 0.5.0
 MOIS_S = 31 * 86400
 
 
@@ -97,9 +106,11 @@ async def async_texte(
     debut: date | None,
     fin: date | None,
     rattraper: bool = True,
+    compact: bool = False,
 ) -> tuple[str, int]:
     """Texte « SBG HA export » de ``debut`` (inclus) à ``fin`` (exclue), et l'instant de génération.
-    Utilisé par l'export manuel ET par l'envoi direct : le contenu est exactement le même."""
+    Utilisé par l'export manuel (``compact`` : version 2) ET par l'envoi direct (version 1) : les
+    valeurs sont exactement les mêmes."""
     if pas == 5 and not options.get(OPT_CINQ_MINUTES):
         raise HomeAssistantError("Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes ».")
     config = await async_configuration(hass, options)
@@ -121,7 +132,7 @@ async def async_texte(
     mesures = await collecteur.async_lire(ids, t_debut, t_fin, pas) if pas != 60 else None
     texte = await hass.async_add_executor_job(
         exporter, config, horaires, t_debut, t_fin, pas, str(hass.config.time_zone),
-        f"{DOMAIN} {VERSION}", maintenant, mesures,
+        f"{DOMAIN} {VERSION}", maintenant, mesures, compact,
     )
     return texte, maintenant
 
@@ -135,11 +146,13 @@ async def async_exporter(
     debut: date | None = None,
     fin: date | None = None,
 ) -> Resultat:
-    """Écrit le fichier et rend son chemin et un lien de téléchargement signé."""
-    texte, maintenant = await async_texte(hass, options, collecteur, pas, debut, fin)
-    nom = f"sbg_ha_export_{datetime.fromtimestamp(maintenant, timezone.utc):%Y%m%d-%H%M%S}_{pas}min.csv"
+    """Écrit le fichier (CSV en version 2, dans un ZIP) et rend son chemin et un lien de
+    téléchargement signé."""
+    texte, maintenant = await async_texte(hass, options, collecteur, pas, debut, fin, compact=True)
+    base = f"sbg_ha_export_{datetime.fromtimestamp(maintenant, timezone.utc):%Y%m%d-%H%M%S}_{pas}min"
+    nom = f"{base}.zip"
     chemin = dossier / SOUS_DOSSIER_EXPORTS / nom
-    await hass.async_add_executor_job(_ecrire, chemin, texte)
+    await hass.async_add_executor_job(_ecrire_zip, chemin, f"{base}.csv", texte)
     lien = async_sign_path(hass, f"{URL_FICHIER}/{nom}", timedelta(hours=VALIDITE_LIEN_H))
     corps = [l for l in texte.splitlines() if not l.startswith("#")]
     return Resultat(chemin, lien, len(corps) - 1, corps[1][:20] if len(corps) > 1 else "",
@@ -150,9 +163,13 @@ def _jour(d: date) -> int:
     return int(datetime(d.year, d.month, d.day, tzinfo=timezone.utc).timestamp())
 
 
-def _ecrire(chemin: Path, texte: str) -> None:
+def _ecrire_zip(chemin: Path, interne: str, texte: str) -> None:
+    """Archive ZIP d'un seul CSV, écrite à côté puis renommée (jamais de ZIP à moitié écrit)."""
     chemin.parent.mkdir(parents=True, exist_ok=True)
-    chemin.write_text(texte, encoding="utf-8", newline="\n")
+    provisoire = chemin.with_suffix(".tmp")
+    with zipfile.ZipFile(provisoire, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        z.writestr(interne, texte.encode("utf-8"))
+    provisoire.replace(chemin)
 
 
 class VueFichier(HomeAssistantView):
@@ -175,6 +192,6 @@ class VueFichier(HomeAssistantView):
             return web.Response(status=HTTPStatus.NOT_FOUND)
         return web.FileResponse(
             chemin,
-            headers={"Content-Type": "text/csv; charset=utf-8",
+            headers={"Content-Type": "application/zip" if nom.endswith(".zip") else "text/csv; charset=utf-8",
                      "Content-Disposition": f'attachment; filename="{nom}"'},
         )

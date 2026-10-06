@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import html
+import io
 from pathlib import Path
+import re
 from unittest.mock import patch
+import zipfile
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.energy.data import async_get_manager
@@ -20,6 +24,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.components.recorder.common import async_wait_recording_done
 
 from custom_components.sbg_energy_export.const import DOMAIN
+from tests import lire_zip
 
 UTC = timezone.utc
 MAINTENANT = datetime(2026, 1, 6, 12, 5, 30, tzinfo=UTC)
@@ -88,7 +93,7 @@ async def installe(hass: HomeAssistant, freezer: FrozenDateTimeFactory, tmp_path
 
 async def test_export_horaire(installe, hass: HomeAssistant, tmp_path: Path) -> None:
     r = await hass.services.async_call(DOMAIN, "exporter", {"pas": 60}, blocking=True, return_response=True)
-    texte = (tmp_path / "sbg_energy_export" / "exports" / r["fichier"]).read_text(encoding="utf-8")
+    texte = lire_zip(tmp_path / "sbg_energy_export" / "exports" / r["fichier"])
     corps = [l for l in texte.splitlines() if not l.startswith("#")]
     assert corps[0].split(",")[-2:] == ["consommation_maison", "voiture_1"]
     # la première ligne de statistiques sert de référence : l'export commence à 01:00
@@ -114,25 +119,39 @@ async def test_quarts_enregistres_puis_export_15(installe, hass: HomeAssistant, 
 
     with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
         r = await hass.services.async_call(DOMAIN, "exporter", {"pas": 15}, blocking=True, return_response=True)
-    texte = (tmp_path / "sbg_energy_export" / "exports" / r["fichier"]).read_text(encoding="utf-8")
+    texte = lire_zip(tmp_path / "sbg_energy_export" / "exports" / r["fichier"])
     corps = [l for l in texte.splitlines() if not l.startswith("#")]
     assert "# debut_mesure_15min: 2026-01-06T10:00:00Z" in texte
     lignes = {l.split(",")[0]: l for l in corps[1:]}
     assert lignes["2026-01-06T10:15:00Z"] == "2026-01-06T10:15:00Z,mesure_15min,0.25,0.05,0.1,,,0.3,0.15"
-    assert lignes["2026-01-06T09:15:00Z"] == "2026-01-06T09:15:00Z,heure_repartie,0.25,0.05,0.1,,,0.3,0.15"
-    assert len(corps) - 1 == 4 * 35
+    # version 2 : une heure sans mesure au quart d'heure reste en UNE ligne horaire
+    assert "# version: 2" in texte and r["fichier"].endswith("_15min.zip")
+    assert lignes["2026-01-06T09:00:00Z"] == "2026-01-06T09:00:00Z,mesure_60min,1,0.2,0.4,,,1.2,0.6"
+    assert "2026-01-06T09:15:00Z" not in lignes
+    assert len(corps) - 1 == 34 + 4  # 34 heures du passé, puis l'heure mesurée en 4 quarts
 
 
 async def test_bouton_et_telechargement(installe, hass: HomeAssistant, hass_client, hass_client_no_auth) -> None:
-    with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
+    with (patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min),
+          patch("custom_components.sbg_energy_export.persistent_notification.async_create") as notifier):
         await hass.services.async_call("button", "press",
                                        {"entity_id": "button.sbg_energy_export_export_hourly"}, blocking=True)
+    # Le lien de la notification porte target="_blank" : sans lui, le frontend intercepte le clic
+    # (lien sur la même origine) comme une page interne et retombe sur le tableau de bord.
+    message = notifier.call_args.args[1]
+    lien = re.search(r'<a href="([^"]+)" target="_blank">Télécharger</a>', message)
+    assert lien is not None and "authSig=" in lien.group(1) and "[Télécharger](" not in message
+    assert (await (await hass_client_no_auth()).get(html.unescape(lien.group(1)))).status == 200
     r = await hass.services.async_call(DOMAIN, "exporter", {"pas": 60}, blocking=True, return_response=True)
     anonyme = await hass_client_no_auth()
     assert (await anonyme.get(f"/api/sbg_energy_export/fichier/{r['fichier']}")).status == 401
     reponse = await anonyme.get(r["lien"])
     assert reponse.status == 200
-    assert (await reponse.text()).startswith("# SBG HA export\n")
+    assert reponse.headers["Content-Type"] == "application/zip"
+    assert f'filename="{r["fichier"]}"' in reponse.headers["Content-Disposition"]
+    with zipfile.ZipFile(io.BytesIO(await reponse.read())) as z:
+        # au pas horaire, les deux versions du format sont identiques : il reste en version 1
+        assert z.read(z.namelist()[0]).decode().startswith("# SBG HA export\n# version: 1\n")
     connecte = await hass_client()
     assert (await connecte.get("/api/sbg_energy_export/fichier/..%2Fsecrets.yaml")).status in (400, 404)
     assert (await connecte.get("/api/sbg_energy_export/fichier/sbg_ha_export_20990101-000000_60min.csv")).status == 404

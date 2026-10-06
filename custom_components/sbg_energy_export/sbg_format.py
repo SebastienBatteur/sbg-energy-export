@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Format « SBG HA export », version 1 : construction et écriture du fichier.
+"""Format « SBG HA export », versions 1 et 2 : construction et écriture du fichier.
 
 Ce module est en Python pur (bibliothèque standard seulement) : il ne dépend pas
 de Home Assistant. Il sert à l'intégration ET au script manuel
@@ -7,8 +7,15 @@ de Home Assistant. Il sert à l'intégration ET au script manuel
 vérifie). Spécification : ``FORMAT_SBG_HA_EXPORT.md``.
 
 Principes :
-  * une ligne par pas de temps (5, 15 ou 60 min), horodatée au DÉBUT de
-    l'intervalle, en UTC ;
+  * version 1 : une ligne par pas de temps (5, 15 ou 60 min), horodatée au
+    DÉBUT de l'intervalle, en UTC ; le passé connu seulement à l'heure est
+    réparti en parts égales au pas du fichier ;
+  * version 2 (« compacte », 0.5.0) : le passé connu seulement à l'heure reste
+    en lignes HORAIRES, seules les heures vraiment mesurées au pas fin sont au
+    pas fin. La durée d'une ligne se lit sur sa provenance. Douze fois moins de
+    lignes pour trois ans au pas de 5 min ; l'export manuel l'utilise, l'envoi
+    direct garde la version 1 (le service range les envois par jours complets
+    au pas de la session) ;
   * énergies en kWh sur l'intervalle ; cellule vide = inconnu (jamais un zéro
     déguisé) ;
   * chaque ligne dit d'où elle vient (provenance) ;
@@ -25,6 +32,7 @@ import math
 
 FORMAT = "SBG HA export"
 VERSION = 1
+VERSION_COMPACTE = 2
 
 # Colonnes d'énergie fixes, dans l'ordre du fichier.
 PRELEVEMENT = "prelevement_reseau"
@@ -37,16 +45,21 @@ ROLES: tuple[str, ...] = (PRELEVEMENT, INJECTION, SOLAIRE, CHARGE, DECHARGE)
 COLONNES_FIXES: tuple[str, ...] = (*ROLES, CONSO)
 
 # Liste fermée. Les 5 premières existent depuis le début ; lavage, froid,
-# informatique et eclairage ajoutées le 06/10/2026 (extension compatible).
+# informatique et eclairage ajoutées le 06/10/2026, ventilation et pompe (pompes
+# et traitement de l'eau : citerne, piscine, UV, adoucisseur) le 07/10/2026
+# (extensions compatibles : un fichier qui ne les utilise pas ne change pas).
 CATEGORIES: tuple[str, ...] = ("voiture", "pac", "ballon", "cuisson", "lavage", "froid", "informatique",
-                               "eclairage", "autre")
+                               "eclairage", "ventilation", "pompe", "autre")
 
 MESURE_5 = "mesure_5min"
 MESURE_15 = "mesure_15min"
 MESURE_60 = "mesure_60min"
 HEURE_REPARTIE = "heure_repartie"
 TROU = "trou"
-PROVENANCES: tuple[str, ...] = (MESURE_5, MESURE_15, MESURE_60, HEURE_REPARTIE, TROU)
+TROU_60 = "trou_60min"  # version 2 : heure entière inconnue, en UNE ligne
+PROVENANCES: tuple[str, ...] = (MESURE_5, MESURE_15, MESURE_60, HEURE_REPARTIE, TROU, TROU_60)
+# Version 2 : ces provenances durent une heure, les autres le pas du fichier.
+PROVENANCES_HORAIRES: tuple[str, ...] = (MESURE_60, TROU_60)
 
 # Pas permis (minutes) et provenance d'une mesure à ce pas. Le pas de 5 min est
 # celui des statistiques à court terme de Home Assistant, sans regroupement.
@@ -288,6 +301,27 @@ def assembler(heures: Sequence[Ligne], mesures: Mapping[int, Ligne], pas_s: int)
     return sortie
 
 
+def assembler_compact(heures: Sequence[Ligne], mesures: Mapping[int, Ligne], pas_s: int) -> list[Ligne]:
+    """Version 2 : comme ``assembler``, mais une heure sans mesure au pas fin reste en UNE
+    ligne horaire (``mesure_60min``, ou ``trou_60min`` si elle est inconnue)."""
+    n = 3600 // pas_s
+    sortie: list[Ligne] = []
+    for h in heures:
+        ms = [mesures.get(h.debut + pas_s * k) for k in range(n)]
+        if any(m is not None and m.provenance != TROU for m in ms):
+            vide: dict[str, float | None] = {c: None for c in h.valeurs}
+            for k, m in enumerate(ms):
+                sortie.append(m if m is not None else Ligne(h.debut + pas_s * k, TROU, vide))
+        else:
+            sortie.append(Ligne(h.debut, TROU_60 if h.provenance == TROU else MESURE_60, h.valeurs))
+    return sortie
+
+
+def duree_s(ligne: Ligne, pas_s: int, version: int) -> int:
+    """Durée couverte par une ligne : une heure pour une ligne horaire de la version 2."""
+    return 3600 if version >= 2 and ligne.provenance in PROVENANCES_HORAIRES else pas_s
+
+
 def assembler_quarts(heures: Sequence[Ligne], quarts: Mapping[int, Ligne]) -> list[Ligne]:
     """Fichier au quart d'heure : quarts mesurés, sinon heure répartie en 4."""
     return assembler(heures, quarts, 900)
@@ -314,10 +348,13 @@ def ecrire(
     fuseau: str,
     generateur: str,
     genere_le: int,
+    version: int = VERSION,
 ) -> str:
     """Texte complet du fichier (UTF-8, fin de ligne LF, séparateur virgule)."""
     if pas_minutes not in PAS_MINUTES:
         raise ValueError("pas de 5, 15 ou 60 minutes seulement")
+    if version not in (VERSION, VERSION_COMPACTE):
+        raise ValueError("version 1 ou 2 seulement")
     colonnes = config.colonnes()
     pas_s = pas_minutes * 60
     # Premier instant mesuré au pas fin : quart d'heure (fichiers à 15 et 60 min,
@@ -326,13 +363,13 @@ def ecrire(
     mesures = [l.debut for l in lignes if l.provenance == mesure_fine]
     meta = [
         f"# {FORMAT}",
-        f"# version: {VERSION}",
+        f"# version: {version}",
         f"# pas_minutes: {pas_minutes}",
         f"# fuseau: {fuseau}",
         "# unite: kWh",
         "# horodatage: debut de l'intervalle, UTC",
         f"# debut: {iso(lignes[0].debut) if lignes else ''}",
-        f"# fin: {iso(lignes[-1].debut + pas_s) if lignes else ''}",
+        f"# fin: {iso(lignes[-1].debut + duree_s(lignes[-1], pas_s, version)) if lignes else ''}",
         f"# debut_{mesure_fine}: {iso(min(mesures)) if mesures else 'aucun'}",
         f"# non_configure: {','.join(config.non_configures())}",
         f"# generateur: {generateur}",
@@ -360,16 +397,20 @@ def exporter(
     generateur: str,
     genere_le: int,
     mesures: Mapping[str, Mapping[int, float]] | None = None,
+    compact: bool = False,
 ) -> str:
     """Tout en un : statistiques horaires (format ``statistics_during_period``)
     et, pour le pas de 5 ou 15 min, énergies déjà calculées à ce pas
-    (``mesures`` : statistique → début de période → kWh)."""
+    (``mesures`` : statistique → début de période → kWh). ``compact`` : version 2
+    pour un pas de 5 ou 15 min (le passé reste horaire) ; au pas de 60 min, le
+    fichier est le même dans les deux versions : il reste en version 1."""
     if pas_minutes not in PAS_MINUTES:
         raise ValueError("pas de 5, 15 ou 60 minutes seulement")
     debut -= debut % 3600
     fin += -fin % 3600
     energies_h = {s: variations(horaires.get(s, []), 3600) for s in config.statistiques()}
     heures = construire_lignes(config, energies_h, debut, fin, 3600, MESURE_60)
+    version = VERSION
     if pas_minutes == 60:
         lignes = heures
     else:
@@ -381,8 +422,13 @@ def exporter(
             a = min(instants)
             fines = construire_lignes(config, mesures, a - a % 3600, max(instants) + pas_s,
                                       pas_s, MESURE_AU_PAS[pas_minutes])
-        lignes = assembler(heures, {l.debut: l for l in fines if l.provenance != TROU}, pas_s)
-    return ecrire(config, lignes, pas_minutes, fuseau, generateur, genere_le)
+        connues = {l.debut: l for l in fines if l.provenance != TROU}
+        if compact:
+            version = VERSION_COMPACTE
+            lignes = assembler_compact(heures, connues, pas_s)
+        else:
+            lignes = assembler(heures, connues, pas_s)
+    return ecrire(config, lignes, pas_minutes, fuseau, generateur, genere_le, version)
 
 
 def variations_par_quart(lignes_5min: Mapping[str, Sequence[Mapping]]) -> dict[str, dict[int, float]]:
@@ -397,7 +443,8 @@ def variations_par_cinq(lignes_5min: Mapping[str, Sequence[Mapping]]) -> dict[st
 
 __all__ = [
     "Appareil", "Colonne", "Configuration", "Ligne", "CATEGORIES", "COLONNES_FIXES", "PROVENANCES",
-    "MESURE_AU_PAS", "PAS_MINUTES", "appareils_du_tableau", "assembler", "assembler_quarts", "construire_lignes",
+    "MESURE_AU_PAS", "PAS_MINUTES", "PROVENANCES_HORAIRES", "appareils_du_tableau", "assembler", "assembler_compact",
+    "assembler_quarts", "construire_lignes", "duree_s",
     "depuis_preferences", "ecrire", "exporter", "iso", "nombre", "regrouper", "variations", "variations_par_cinq",
     "variations_par_quart",
 ]

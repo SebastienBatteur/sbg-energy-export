@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import html
 from pathlib import Path
 from typing import Any
 
@@ -115,6 +116,23 @@ def _entree(hass: HomeAssistant) -> SbgConfigEntry:
     return entrees[0]
 
 
+def lien_telechargement(lien: str) -> str:
+    """Lien « Télécharger » pour le Markdown d'une notification (0.5.0).
+
+    Un lien Markdown ``[Télécharger](/api/…)`` ne marche pas : il est sur la même
+    origine que l'interface, et le frontend (écouteur de clics global de
+    ``home-assistant.ts`` → ``isNavigationClick``) l'intercepte comme une navigation
+    interne vers une page inconnue, qui retombe sur le tableau de bord ; la requête
+    n'atteint jamais ``VueFichier``. ``isNavigationClick`` laisse passer un lien qui
+    porte un attribut ``target``, et le filtre HTML du Markdown (bibliothèque ``xss``,
+    liste blanche par défaut : ``a`` → ``target``, ``href``, ``title``) le garde ;
+    ``download`` et ``rel`` sont retirés. ``target="_blank"`` fait donc faire au
+    navigateur la vraie requête, et la réponse ``Content-Disposition: attachment``
+    déclenche le téléchargement. Le lien reste signé et valable une heure.
+    """
+    return f'<a href="{html.escape(lien, quote=True)}" target="_blank">Télécharger</a>'
+
+
 async def async_exporter_et_notifier(
     hass: HomeAssistant, entree: SbgConfigEntry, pas: int, debut=None, fin=None
 ) -> Resultat:
@@ -123,10 +141,14 @@ async def async_exporter_et_notifier(
     r = await async_exporter(hass, dict(entree.options), d.collecteur, d.dossier, pas, debut, fin)
     persistent_notification.async_create(
         hass,
-        (f"Fichier prêt : **{r.chemin.name}** ({r.lignes} lignes au pas de {pas} min).\n\n"
-         f"[Télécharger]({r.lien}) (lien valable une heure).\n\n"
-         "Le fichier reste aussi dans le dossier `sbg_energy_export/exports` de la configuration. "
-         "Rien n'a été envoyé : déposez-le vous-même sur analyse.sbg-energy.com."),
+        (f"Fichier prêt : **{r.chemin.name}** ({r.lignes} lignes"
+         + (f" ; pas de {pas} min là où il est mesuré, heure par heure avant" if pas != 60 else " horaires")
+         + ").\n\n"
+         f"{lien_telechargement(r.lien)} (lien valable une heure ; si rien ne se télécharge : "
+         "clic droit sur le lien → « Ouvrir dans un nouvel onglet »).\n\n"
+         "C'est une archive ZIP : déposez-la telle quelle sur analyse.sbg-energy.com. "
+         "Elle reste aussi dans le dossier `sbg_energy_export/exports` de la configuration. "
+         "Rien n'a été envoyé."),
         title="SBG Energy Export",
         notification_id=f"{DOMAIN}_export",
     )

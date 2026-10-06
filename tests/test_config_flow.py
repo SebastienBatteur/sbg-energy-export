@@ -129,3 +129,35 @@ def test_deviner_categorie() -> None:
     assert deviner_categorie("Four") == "cuisson"
     assert deviner_categorie("Autoconsommation") == "autre"
     assert deviner_categorie("Niveau eau") == "autre"
+
+
+def test_categories_regles_de_proposition_retour_installation_reelle() -> None:
+    """Noms neutres équivalents à ceux d'une vraie installation (07/10/2026)."""
+    # port PoE d'un switch : toujours informatique, jamais la catégorie du mot qui suit
+    assert deviner_categorie("switch_16_ports_port_pac_poe") == "informatique"
+    assert deviner_categorie("Switch 16 ports - port camera PoE") == "informatique"
+    assert deviner_categorie("switch_16_ports_port_ap2_poe") == "informatique"
+    assert deviner_categorie("Poêle à pellets") != "informatique"  # « poe » est un mot entier
+    # eau chaude sanitaire avant la PAC
+    assert deviner_categorie("pac_appoint_ecs") == "ballon"
+    assert deviner_categorie("Boiler sanitaire") == "ballon"
+    assert deviner_categorie("Dégivrage PAC") == "pac"
+    assert deviner_categorie("Pompe à chaleur air-eau") == "pac"
+    # traitement de l'eau, pas éclairage ; pompes
+    assert deviner_categorie("Lampe UV eau de pluie") == "pompe"
+    assert deviner_categorie("Pompe citerne") == "pompe"
+    assert deviner_categorie("Pompe piscine") == "pompe"
+    assert deviner_categorie("Adoucisseur") == "pompe"
+    assert deviner_categorie("Lampe salon") == "eclairage"
+    # ventilation
+    assert deviner_categorie("ComfoAir Q350") == "ventilation"
+    assert deviner_categorie("VMC double flux") == "ventilation"
+    assert deviner_categorie("Ventilation cave") == "ventilation"
+    # réseau
+    for nom in ("Starlink", "Modem fibre", "Routeur", "Point d'accès AP1", "ap2", "NAS", "Home Assistant"):
+        assert deviner_categorie(nom) == "informatique", nom
+    assert deviner_categorie("Appoint salle de bain") != "informatique"  # « ap » : mot entier
+    # un support d'alimentation ne décide pas : on lit le reste du nom
+    assert deviner_categorie("Prise lave-linge") == "lavage"
+    assert deviner_categorie("Multiprise bureau ordinateur") == "informatique"
+    assert deviner_categorie("Porte de garage") == "autre"

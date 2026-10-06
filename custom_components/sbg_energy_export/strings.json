@@ -16,7 +16,7 @@
       },
       "selection": {
         "title": "Selection",
-        "description": "Devices are listed from the most to the least useful for the analysis: large and controllable loads (car, heat pump, hot water), then cooking and washing, then base load (cold, IT, lighting). Recommended ones are ticked; you remain free to choose.",
+        "description": "Devices are listed from the most to the least useful for the analysis: large and controllable loads (car, heat pump, hot water), then cooking and washing, then base load (cold, IT, lighting, ventilation, pumps). Recommended ones are ticked; you remain free to choose.",
         "data": {
           "appareils": "Devices"
         }
@@ -48,7 +48,7 @@
       },
       "selection": {
         "title": "Selection",
-        "description": "Devices are listed from the most to the least useful for the analysis: large and controllable loads (car, heat pump, hot water), then cooking and washing, then base load (cold, IT, lighting). Recommended ones are ticked; you remain free to choose.",
+        "description": "Devices are listed from the most to the least useful for the analysis: large and controllable loads (car, heat pump, hot water), then cooking and washing, then base load (cold, IT, lighting, ventilation, pumps). Recommended ones are ticked; you remain free to choose.",
         "data": {
           "appareils": "Devices"
         }
@@ -112,6 +112,8 @@
         "froid": "Cold (fridge, freezer)",
         "informatique": "IT and network",
         "eclairage": "Lighting",
+        "ventilation": "Ventilation (MVHR, extractor)",
+        "pompe": "Pumps and water (tank, pool, UV, softener)",
         "autre": "Other"
       }
     },

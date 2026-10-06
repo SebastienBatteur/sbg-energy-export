@@ -147,12 +147,14 @@ Le script :
 Options utiles :
 
 - `--pas 15` : fichier au quart d'heure ; les **~10 derniers jours** y sont mesurés au quart
-  d'heure (`mesure_15min`), le reste est fait d'heures réparties en 4 (`heure_repartie`) ;
-- `--pas 5` : même chose au pas de 5 minutes (`mesure_5min` ; heures réparties en 12) ; plus
+  d'heure (`mesure_15min`), le reste reste en lignes horaires (`mesure_60min`, version 2 du
+  format) ;
+- `--pas 5` : même chose au pas de 5 minutes (`mesure_5min`) ; plus
   fin, utile pour reconnaître les démarrages et les cycles des appareils ;
 - `--debut 2025-10-01 --fin 2026-10-01` : une période précise (dates UTC, fin exclue) ;
 - `--appareils 1,3 --categorie 1=voiture --categorie 3=pac` : sans questions ;
-- `--sortie mon_fichier.csv`.
+- `--sortie mon_fichier.csv` ; `--sortie mon_fichier.zip` écrit le CSV dans une archive ZIP
+  (bien plus petite, acceptée telle quelle par le service).
 
 Pour ne pas taper le jeton, vous pouvez le mettre dans la variable d'environnement
 `SBG_HA_JETON` le temps de la commande ; ne l'écrivez pas dans un fichier.

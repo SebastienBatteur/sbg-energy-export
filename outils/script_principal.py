@@ -15,8 +15,9 @@ import struct
 import sys
 import time
 import urllib.parse
+import zipfile
 
-VERSION_SCRIPT = "0.2.0"
+VERSION_SCRIPT = "0.3.0"
 NOMS_ROLES = {
     "prelevement": PRELEVEMENT, "injection": INJECTION, "solaire": SOLAIRE,
     "charge": CHARGE, "decharge": DECHARGE,
@@ -236,16 +237,18 @@ def principal(argv: list | None = None) -> int:
                    help="avec --depuis-json : prelevement=sensor.x (aussi injection, solaire, charge, decharge)")
     p.add_argument("--appareil", action="append", default=[],
                    help="avec --depuis-json ou --depuis-csv : sensor.x=voiture "
-                        "(pac, ballon, cuisson, lavage, froid, informatique, eclairage, autre)")
+                        "(pac, ballon, cuisson, lavage, froid, informatique, eclairage, ventilation, pompe, autre)")
     p.add_argument("--appareils", help="avec --url : tous, aucun, ou numéros 1,3")
     p.add_argument("--categorie", action="append", default=[], help="avec --url : 1=voiture")
     p.add_argument("--pas", type=int, choices=(5, 15, 60), default=60,
-                   help="60 (défaut) ; 15 ou 5 : les ~10 derniers jours au pas fin, le reste en heure répartie")
+                   help="60 (défaut) ; 15 ou 5 : les ~10 derniers jours au pas fin, le reste en lignes "
+                        "horaires (version 2 du format)")
     p.add_argument("--debut", help="AAAA-MM-JJ (UTC), par défaut le début des statistiques")
     p.add_argument("--fin", help="AAAA-MM-JJ (UTC, exclu), par défaut l'heure en cours")
     p.add_argument("--fuseau", default=None,
                    help="fuseau de la maison (par défaut celui de Home Assistant, sinon Europe/Brussels)")
-    p.add_argument("--sortie", default="sbg_ha_export.csv")
+    p.add_argument("--sortie", default="sbg_ha_export.csv",
+                   help="fichier écrit ; s'il se termine par .zip : le CSV compressé dans une archive ZIP")
     a = p.parse_args(argv)
 
     maintenant = int(time.time())
@@ -309,9 +312,14 @@ def principal(argv: list | None = None) -> int:
         p.error("donnez --url, --depuis-json ou --depuis-csv")
         return 2
 
-    texte = exporter(config, horaires, debut, fin, a.pas, fuseau, generateur, maintenant, mesures)
-    with open(a.sortie, "w", encoding="utf-8", newline="\n") as f:
-        f.write(texte)
+    texte = exporter(config, horaires, debut, fin, a.pas, fuseau, generateur, maintenant, mesures, compact=True)
+    if a.sortie.lower().endswith(".zip"):
+        interne = os.path.basename(a.sortie)[:-4] + ".csv"
+        with zipfile.ZipFile(a.sortie, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+            z.writestr(interne, texte.encode("utf-8"))
+    else:
+        with open(a.sortie, "w", encoding="utf-8", newline="\n") as f:
+            f.write(texte)
     lignes = texte.count("\n") - texte.count("\n#") - 2
     print(f"Écrit : {a.sortie} ({lignes} lignes au pas de {a.pas} min, de {iso(debut)} à {iso(fin)}).")
     print("Déposez-le vous-même sur analyse.sbg-energy.com. Le script n'a rien envoyé d'autre part.")

@@ -145,3 +145,23 @@ def test_client_websocket_local(socket_enabled):  # serveur local 127.0.0.1 seul
     assert recu[0] == {"type": "auth", "access_token": "jeton-de-test"}
     assert recu[1]["type"] == "recorder/statistics_during_period"
     assert len(r["sensor.x"]) == 3000
+
+
+def test_sortie_zip_pas_fin_en_version_2(tmp_path):
+    """``--sortie x.zip`` : le CSV dans une archive ZIP ; au pas de 15 min, version 2 (passé horaire)."""
+    import zipfile
+
+    s = charger_script()
+    t0 = 1767607200  # 2026-01-05T10:00Z
+    stats = {"sensor.import": [{"start": (t0 + k * 3600) * 1000, "sum": 10.0 + k} for k in range(4)]}
+    src = tmp_path / "stats.json"
+    src.write_text(json.dumps(stats), encoding="utf-8")
+    sortie = tmp_path / "x.zip"
+    assert s.principal(["--depuis-json", str(src), "--role", "prelevement=sensor.import", "--pas", "15",
+                        "--sortie", str(sortie)]) == 0
+    with zipfile.ZipFile(sortie) as z:
+        assert z.namelist() == ["x.csv"]
+        texte = z.read("x.csv").decode("utf-8")
+    assert "# version: 2\n" in texte and "# pas_minutes: 15\n" in texte
+    corps = [l for l in texte.splitlines() if not l.startswith("#")]
+    assert corps[1:] == [f"2026-01-05T{h}:00:00Z,mesure_60min,1,,,,,1" for h in (11, 12, 13)]

@@ -30,6 +30,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import asy
 
 from custom_components.sbg_energy_export import stockage
 from custom_components.sbg_energy_export.const import DOMAIN
+from tests import lire_zip
 
 UTC = timezone.utc
 MAINTENANT = datetime(2026, 1, 6, 12, 5, 30, tzinfo=UTC)
@@ -105,7 +106,7 @@ async def installer(hass: HomeAssistant, freezer: FrozenDateTimeFactory, tmp_pat
 
 
 def corps(tmp_path: Path, r: dict) -> tuple[str, list[str]]:
-    texte = (tmp_path / "sbg_energy_export" / "exports" / r["fichier"]).read_text(encoding="utf-8")
+    texte = lire_zip(tmp_path / "sbg_energy_export" / "exports" / r["fichier"])
     return texte, [l for l in texte.splitlines() if not l.startswith("#")]
 
 
@@ -129,17 +130,20 @@ async def test_installation_un_an_horaire_et_dix_jours_au_quart(
         r = await hass.services.async_call(DOMAIN, "exporter", {"pas": 15}, blocking=True, return_response=True)
         texte, c = corps(tmp_path, r)
         assert "# debut_mesure_15min: 2025-12-27T13:00:00Z" in texte
-        assert c[1] == "2025-01-06T01:00:00Z,heure_repartie,0.25,0.05,0.1,,,0.3,0.15"   # tout le passé, en horaire
+        assert "# version: 2" in texte
+        assert c[1] == "2025-01-06T01:00:00Z,mesure_60min,1,0.2,0.4,,,1.2,0.6"   # tout le passé, en horaire
         lignes_par_t = {l.split(",")[0]: l for l in c[1:]}
-        assert lignes_par_t["2025-12-27T12:45:00Z"].split(",")[1] == "heure_repartie"
+        assert lignes_par_t["2025-12-27T12:00:00Z"].split(",")[1] == "mesure_60min"
+        assert "2025-12-27T12:45:00Z" not in lignes_par_t
         assert lignes_par_t["2025-12-27T13:00:00Z"] == "2025-12-27T13:00:00Z,mesure_15min,0.25,0.05,0.1,,,0.3,0.175"
         assert lignes_par_t["2025-12-27T13:15:00Z"] == "2025-12-27T13:15:00Z,mesure_15min,0.25,0.05,0.1,,,0.3,0.125"
         assert c[-1].startswith("2026-01-06T11:45:00Z,mesure_15min,")
         heures = int((datetime(2026, 1, 6, 12, tzinfo=UTC) - DEBUT).total_seconds() // 3600) - 1
-        assert len(c) - 1 == 4 * heures
+        mesurees = 10 * 24 - 1  # ~10 jours au quart d'heure
+        assert len(c) - 1 == (heures - mesurees) + 4 * mesurees
         provenances = [l.split(",")[1] for l in c[1:]]
-        assert provenances.count("mesure_15min") == 4 * (10 * 24 - 1)  # ~10 jours au quart d'heure
-        assert set(provenances) == {"heure_repartie", "mesure_15min"}
+        assert provenances.count("mesure_15min") == 4 * mesurees
+        assert set(provenances) == {"mesure_60min", "mesure_15min"}
 
         # puis en continu
         freezer.move_to(MAINTENANT + timedelta(hours=1))
@@ -185,9 +189,9 @@ async def test_option_cinq_minutes(hass: HomeAssistant, freezer: FrozenDateTimeF
         assert sorted(f.name for f in mesures.iterdir()) == ["mesures_5min_2025-12.csv.gz", "mesures_5min_2026-01.csv"]
         r = await hass.services.async_call(DOMAIN, "exporter", {"pas": 5}, blocking=True, return_response=True)
         texte, c = corps(tmp_path, r)
-        assert r["fichier"].endswith("_5min.csv")
+        assert r["fichier"].endswith("_5min.zip")
         assert "# pas_minutes: 5" in texte and "# debut_mesure_5min: 2025-12-27T13:00:00Z" in texte
-        assert c[1] == "2025-01-06T01:00:00Z,heure_repartie,0.0833,0.0167,0.0333,,,0.1,0.05"  # heure en 12
+        assert c[1] == "2025-01-06T01:00:00Z,mesure_60min,1,0.2,0.4,,,1.2,0.6"  # le passé reste horaire (v2)
         lignes_par_t = {l.split(",")[0]: l for l in c[1:]}
         assert lignes_par_t["2025-12-27T13:00:00Z"] == "2025-12-27T13:00:00Z,mesure_5min,0.0833,0.0167,0.0333,,,0.1,0.075"
         assert lignes_par_t["2025-12-27T13:05:00Z"] == "2025-12-27T13:05:00Z,mesure_5min,0.0833,0.0167,0.0333,,,0.1,0.025"

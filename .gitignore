@@ -7,5 +7,6 @@ outils/__pycache__/
 # donnees personnelles : jamais dans git
 *.json.local
 sbg_ha_export*.csv
+sbg_ha_export*.zip
 !tests/donnees/*.csv
 energy*.csv

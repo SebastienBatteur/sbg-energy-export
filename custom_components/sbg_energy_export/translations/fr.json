@@ -16,7 +16,7 @@
       },
       "selection": {
         "title": "Sélection",
-        "description": "Les appareils sont classés du plus utile au moins utile pour l'analyse : gros consommateurs et pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond (froid, informatique, éclairage). Les recommandés sont cochés ; vous restez libre.",
+        "description": "Les appareils sont classés du plus utile au moins utile pour l'analyse : gros consommateurs et pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond (froid, informatique, éclairage, ventilation, pompes). Les recommandés sont cochés ; vous restez libre.",
         "data": {
           "appareils": "Appareils"
         }
@@ -48,7 +48,7 @@
       },
       "selection": {
         "title": "Sélection",
-        "description": "Les appareils sont classés du plus utile au moins utile pour l'analyse : gros consommateurs et pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond (froid, informatique, éclairage). Les recommandés sont cochés ; vous restez libre.",
+        "description": "Les appareils sont classés du plus utile au moins utile pour l'analyse : gros consommateurs et pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond (froid, informatique, éclairage, ventilation, pompes). Les recommandés sont cochés ; vous restez libre.",
         "data": {
           "appareils": "Appareils"
         }
@@ -112,6 +112,8 @@
         "froid": "Froid (frigo, congélateur)",
         "informatique": "Informatique et réseau",
         "eclairage": "Éclairage",
+        "ventilation": "Ventilation (VMC)",
+        "pompe": "Pompes et eau (citerne, piscine, UV, adoucisseur)",
         "autre": "Autre"
       }
     },

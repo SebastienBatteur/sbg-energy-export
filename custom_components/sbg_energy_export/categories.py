@@ -5,36 +5,67 @@ Règles déterministes (aucune IA), dans cet ordre :
 
 1. mots du **nom** de l'appareil dans le tableau Énergie (ou du capteur), puis du
    nom, du modèle et du fabricant de l'**appareil Home Assistant** qui porte le
-   capteur (français, néerlandais, anglais, allemand ; début de mot) ;
+   capteur (français, néerlandais, anglais, allemand ; début de mot, accents et
+   tirets bas ignorés : ``pac_appoint_ecs`` se lit « pac appoint ecs ») ;
 2. **puissance typique** : une heure à 5,5 kWh ou plus (5,5 kW de moyenne pendant
    une heure entière) n'arrive dans un logement qu'avec la recharge d'une voiture ;
 3. sinon ``autre``.
+
+Ordre des règles de mots (0.5.0, retour d'une vraie installation le 07/10/2026) : la
+PREMIÈRE règle qui reconnaît un mot gagne, et les plus spécifiques passent avant :
+
+* un **port PoE** de switch alimente un petit appareil réseau : toujours
+  « informatique », quel que soit le mot qui suit (« port PAC PoE » n'est pas une PAC) ;
+* l'**eau chaude sanitaire** (ECS, ballon, boiler…) passe avant la PAC : « appoint ECS
+  de la PAC » chauffe de l'eau, pas la maison ;
+* « UV » avec « eau » est un traitement de l'eau (catégorie « pompe »), pas un éclairage ;
+* les mots qui désignent un simple **support d'alimentation** (prise, multiprise,
+  plug, stopcontact, Steckdose) ne sont pas des indices : on lit le reste du nom.
 
 L'utilisateur corrige toujours la proposition.
 """
 from __future__ import annotations
 
 import re
+import unicodedata
 
-# Ordre d'essai : du plus spécifique au plus général (« lave-vaisselle » avant
-# « vaisselle », « frigo » avant « cuisine »...).
+# Un indice est un mot ou une suite de mots, reconnu au DÉBUT d'un mot (« lave linge »
+# reconnaît « lave-linge ») ; « = » à la fin : le mot entier seulement (« ecs= » ne
+# reconnaît pas « ecstasy ») ; « a+b » : les deux indices dans le même nom ; « re: » :
+# une expression régulière sur le texte normalisé (mots séparés par une espace,
+# entourés d'espaces).
 INDICES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # 1. Port PoE d'un switch : un petit appareil réseau, jamais la catégorie du mot qui suit.
+    ("informatique", ("poe=",)),
+    # 2. Eau chaude sanitaire, avant la PAC (« appoint ECS » de la PAC = eau chaude).
+    ("ballon", ("ecs=", "ballon", "boiler", "chauffe eau", "water heater", "warmwater", "warm water",
+                "warmwasser", "sanitaire", "thermodynamique", "cumulus", "eau chaude")),
+    # 3. Traitement de l'eau par UV, avant l'éclairage (« lampe UV eau »).
+    ("pompe", ("uv=+eau=", "uv=+water", "uv=+wasser", "adoucisseur", "waterontharder", "water softener",
+               "enthartung")),
     ("voiture", ("voiture", "borne", "wallbox", "charger", "chargeur", "laadpaal", "laadpunt", "ladestation",
                  "ev", "car", "tesla", "zoe", "recharge", "easee", "zaptec", "zappi", "alfen", "peblar")),
-    ("lavage", ("lave linge", "lave vaisselle", "seche linge", "sèche linge", "machine a laver", "machine à laver",
+    ("lavage", ("lave linge", "lave vaisselle", "seche linge", "machine a laver",
                 "washing", "washer", "dryer", "dishwasher", "wasmachine", "droogkast", "droger", "vaatwas",
                 "waschmaschine", "trockner", "geschirrsp", "lessive")),
-    ("froid", ("frigo", "refrigerateur", "réfrigérateur", "congelateur", "congélateur", "fridge", "freezer",
-               "koelkast", "diepvries", "vriezer", "kühlschrank", "kuhlschrank", "gefrier", "cave a vin", "cave à vin")),
-    ("pac", ("pac", "pompe a chaleur", "pompe à chaleur", "heat pump", "heatpump", "warmtepomp", "wärmepumpe",
-             "airco", "clim", "chauffage", "heating", "verwarming", "heizung", "radiateur", "convecteur")),
-    ("ballon", ("ballon", "boiler", "chauffe eau", "water heater", "ecs", "warmwater", "sanitaire", "thermodynamique")),
+    ("froid", ("frigo", "refrigerateur", "congelateur", "fridge", "freezer",
+               "koelkast", "diepvries", "vriezer", "kuhlschrank", "gefrier", "cave a vin")),
+    ("pac", ("pac", "pompe a chaleur", "heat pump", "heatpump", "warmtepomp", "warmepumpe",
+             "airco", "clim", "chauffage", "heating", "verwarming", "heizung", "radiateur", "convecteur",
+             "degivrage")),
+    # Après la PAC : « pompe à chaleur » est une PAC, « pompe de citerne » une pompe.
+    ("ventilation", ("ventil", "vmc=", "comfoair", "comfo", "wtw=", "mvhr=", "luftung", "air extract",
+                     "extracteur")),
+    ("pompe", ("pompe", "pump", "pomp", "pumpe", "citerne", "regenwater", "rainwater", "reservoir", "piscine",
+               "pool", "zwembad", "forage", "puits", "osmose")),
     ("cuisson", ("four", "oven", "cuisson", "cuisini", "induction", "kookplaat", "plaque", "taque", "cooking", "hob",
                  "micro", "fornuis", "herd", "backofen", "kochfeld", "airfryer", "bouilloire", "kettle", "waterkoker")),
     ("informatique", ("ordinateur", "informatique", "pc", "computer", "serveur", "server", "nas", "box", "routeur",
-                      "router", "modem", "switch", "reseau", "réseau", "network", "netwerk", "imprimante", "printer",
-                      "tv", "tele", "télé", "television", "télévision", "console", "multimedia", "multimédia", "rack")),
-    ("eclairage", ("eclairage", "éclairage", "lumiere", "lumière", "lampe", "light", "lighting", "verlichting",
+                      "router", "modem", "switch", "reseau", "network", "netwerk", "imprimante", "printer",
+                      "tv", "tele", "television", "console", "multimedia", "rack", "starlink",
+                      r"re: ap\d*(?= )", "access point", "point d acces", "wifi", "home assistant",
+                      "homeassistant", "raspberry", "unifi")),
+    ("eclairage", ("eclairage", "lumiere", "lampe", "light", "lighting", "verlichting",
                    "licht", "led", "spots")),
 )
 
@@ -44,7 +75,7 @@ SEUIL_VOITURE_KWH_H = 5.5
 # 3 = fond (tourne en continu), 4 = sans catégorie.
 PRIORITE: dict[str, int] = {
     "voiture": 1, "pac": 1, "ballon": 1, "cuisson": 2, "lavage": 2,
-    "froid": 3, "informatique": 3, "eclairage": 3, "autre": 4,
+    "froid": 3, "informatique": 3, "eclairage": 3, "ventilation": 3, "pompe": 3, "autre": 4,
 }
 RECOMMANDE_JUSQUA = 2  # cochés par défaut dans une sélection
 
@@ -58,6 +89,8 @@ RAISONS: dict[str, dict[str, str]] = {
         "froid": "facultatif : tourne en continu (consommation de fond)",
         "informatique": "facultatif : réseau et veille (consommation de fond)",
         "eclairage": "facultatif : petite part de la consommation",
+        "ventilation": "facultatif : tourne en continu (consommation de fond)",
+        "pompe": "facultatif : pompes et traitement de l'eau, souvent en continu",
         "autre": "facultatif",
     },
     "en": {
@@ -69,21 +102,37 @@ RAISONS: dict[str, dict[str, str]] = {
         "froid": "optional: runs all the time (base load)",
         "informatique": "optional: network and standby (base load)",
         "eclairage": "optional: small share of consumption",
+        "ventilation": "optional: runs all the time (base load)",
+        "pompe": "optional: pumps and water treatment, often running all the time",
         "autre": "optional",
     },
 }
 LIBELLES: dict[str, dict[str, str]] = {
     "fr": {"voiture": "Voiture / borne", "pac": "PAC / chauffage", "ballon": "Eau chaude", "cuisson": "Cuisson",
            "lavage": "Lavage", "froid": "Froid", "informatique": "Informatique et réseau",
-           "eclairage": "Éclairage", "autre": "Autre"},
+           "eclairage": "Éclairage", "ventilation": "Ventilation", "pompe": "Pompes et eau", "autre": "Autre"},
     "en": {"voiture": "Car / charger", "pac": "Heat pump / heating", "ballon": "Hot water", "cuisson": "Cooking",
            "lavage": "Washing", "froid": "Cold", "informatique": "IT and network", "eclairage": "Lighting",
-           "autre": "Other"},
+           "ventilation": "Ventilation", "pompe": "Pumps and water", "autre": "Other"},
 }
 
 
 def _mots(texte: str) -> str:
-    return " " + " ".join(re.findall(r"\w+", texte.casefold())) + " "
+    """« Pac_Appoint-ÉCS » → `` pac appoint ecs `` (minuscules, sans accents, mots séparés)."""
+    sans_accents = "".join(c for c in unicodedata.normalize("NFKD", texte.casefold())
+                           if not unicodedata.combining(c))
+    return " " + " ".join(re.findall(r"[^\W_]+", sans_accents)) + " "
+
+
+def _indice(n: str, indice: str) -> bool:
+    """L'indice est-il dans le texte normalisé ``n`` ?"""
+    if indice.startswith("re:"):
+        return re.search(" " + indice[3:].strip(), n) is not None
+    if "+" in indice:
+        return all(_indice(n, partie) for partie in indice.split("+"))
+    entier = indice.endswith("=")
+    mot = _mots(indice.rstrip("=")).strip()
+    return f" {mot}{' ' if entier else ''}" in n
 
 
 def par_le_nom(*textes: str | None) -> str | None:
@@ -92,8 +141,8 @@ def par_le_nom(*textes: str | None) -> str | None:
         if not texte:
             continue
         n = _mots(texte)
-        for categorie, mots in INDICES:
-            if any(f" {_mots(m).strip()}" in n for m in mots):  # début de mot
+        for categorie, indices in INDICES:
+            if any(_indice(n, i) for i in indices):
                 return categorie
     return None
 

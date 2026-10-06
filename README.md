@@ -21,16 +21,16 @@ sur un service d'analyse comme analyse.sbg-energy.com.
   L'intégration reprend ces ~10 jours à l'installation, puis enregistre chaque quart d'heure (ou,
   en option, chaque période de 5 minutes) au fil de l'eau.
 
-> Statut : **version 0.4.0, pas encore publiée**. Nom, licence et publication à décider.
+> Statut : **version 0.5.0, pas encore publiée**. Nom, licence et publication à décider.
 
 ## Ce que contient l'export
 
 | Période | Résolution | Provenance dans le fichier |
 |---|---|---|
-| Avant l'installation (depuis le début de vos statistiques) | l'heure | `mesure_60min`, ou `heure_repartie` (heure répartie en 4, ou en 12 au pas de 5 min) |
+| Avant l'installation (depuis le début de vos statistiques) | l'heure | `mesure_60min` : une ligne par heure (version 2 du format, depuis 0.5.0 ; auparavant l'heure était répartie en 4 ou 12 lignes `heure_repartie`) |
 | ~10 jours avant l'installation, et depuis | le quart d'heure | `mesure_15min` |
 | idem, avec l'option « pas plus fin : 5 minutes » | 5 minutes | `mesure_5min` (fichier à 5 min) |
-| Données absentes | — | `trou` (cellules vides) |
+| Données absentes | — | `trou` (cellules vides) ; `trou_60min` pour une heure entière du passé |
 
 Dès l'installation, un export contient donc tout le passé en horaire et les ~10 derniers jours au
 pas fin. Une cellule vide veut dire « inconnu », jamais zéro.
@@ -54,13 +54,16 @@ Puis : **Paramètres → Appareils et services → Ajouter une intégration → 
    du tableau Énergie.
    L'écran les classe du plus utile au moins utile pour l'analyse : gros consommateurs et
    pilotables (voiture, PAC, eau chaude), puis cuisson et lavage, puis consommation de fond
-   (froid, informatique, éclairage), avec une phrase sur l'intérêt de chacun ; les recommandés
+   (froid, informatique, éclairage, ventilation, pompes), avec une phrase sur l'intérêt de chacun ; les recommandés
    sont cochés par défaut, vous restez libre.
 2. **Catégorie** de chaque appareil retenu : voiture / borne, PAC / chauffage, eau chaude,
-   cuisson, lavage, froid, informatique et réseau, éclairage, autre. Elle est proposée par des
-   règles fixes (sans IA) : le nom, puis l'appareil Home Assistant (nom, modèle, fabricant), puis
-   la puissance typique (une heure à 5,5 kWh ou plus = recharge de voiture) ; corrigez-la si
-   besoin.
+   cuisson, lavage, froid, informatique et réseau, éclairage, ventilation, pompes et eau, autre.
+   Elle est proposée par des règles fixes (sans IA) : le nom, puis l'appareil Home Assistant (nom,
+   modèle, fabricant), puis la puissance typique (une heure à 5,5 kWh ou plus = recharge de
+   voiture) ; corrigez-la si besoin. Les mots les plus précis gagnent : un « port PoE » de switch
+   est toujours de l'informatique, « ECS » (eau chaude sanitaire) passe avant « PAC », « UV » avec
+   « eau » est un traitement de l'eau et pas un éclairage ; « prise » ou « multiprise » ne décident
+   rien seuls.
 3. **Conservation locale** (années, **3** par défaut) : les mois plus anciens sont supprimés.
 4. **Pas plus fin : 5 minutes** (désactivé par défaut) : garde les périodes de 5 minutes au lieu
    des quarts d'heure. Une résolution plus fine aide à reconnaître les appareils (démarrages,
@@ -77,7 +80,10 @@ Modifiable ensuite par **Configurer** sur la carte de l'intégration.
   UTC, fin exclue) ; il rend le nom du fichier et le lien.
 
 Une **notification** donne un lien **Télécharger**, servi par votre Home Assistant et valable une
-heure. Le fichier reste dans `<config>/sbg_energy_export/exports/`.
+heure ; il s'ouvre dans un nouvel onglet, qui télécharge le fichier (si rien ne se passe : clic
+droit → « Ouvrir dans un nouvel onglet »). Le fichier est une **archive ZIP** qui contient le CSV :
+déposez-la telle quelle sur analyse.sbg-energy.com. Elle reste dans
+`<config>/sbg_energy_export/exports/`.
 
 Le capteur de diagnostic **Dernier quart d'heure enregistré** montre que l'enregistrement tourne
 (attribut : premier quart d'heure enregistré).
@@ -175,7 +181,7 @@ envoi permis, jours envoyés).
 
 Au démarrage, l'intégration rattrape les périodes manquantes tant que Home Assistant a encore
 leurs statistiques de 5 minutes (~10 jours) : un arrêt plus long laisse un trou, rempli à l'export
-par l'heure répartie. Les fichiers de la version 0.1.0 (`quarts/`) sont repris automatiquement.
+par la ligne horaire. Les fichiers de la version 0.1.0 (`quarts/`) sont repris automatiquement.
 
 ## Sans installer l'intégration
 

@@ -20,7 +20,7 @@ yourself to an analysis service such as analyse.sbg-energy.com.
   integration picks up those ~10 days at installation, then records every quarter-hour (or,
   optionally, every 5-minute period) as it goes.
 
-> Status: **version 0.4.0, not published yet**. Name, licence and publication still to be decided.
+> Status: **version 0.5.0, not published yet**. Name, licence and publication still to be decided.
 
 ## What the export contains
 
@@ -52,10 +52,10 @@ Then **Settings → Devices & services → Add integration → SBG Energy Export
 1. **Devices to export**: *All*, *None* or *A selection* of the Energy dashboard's individual devices.
    The screen lists them from the most to the least useful for the analysis: large and
    controllable loads (car, heat pump, hot water), then cooking and washing, then base load
-   (cold, IT, lighting), with one sentence on why; recommended ones are ticked by default, you
+   (cold, IT, lighting, ventilation, pumps), with one sentence on why; recommended ones are ticked by default, you
    remain free to choose.
 2. **Category** of each selected device: car / charger, heat pump / heating, hot water, cooking,
-   washing, cold, IT and network, lighting, other. It is suggested by fixed rules (no AI): the
+   washing, cold, IT and network, lighting, ventilation, pumps and water, other. It is suggested by fixed rules (no AI): the
    name, then the Home Assistant device (name, model, manufacturer), then the typical power (an
    hour at 5.5 kWh or more = car charging); correct it if needed.
 3. **Keep local data** (years, **3** by default): older months are deleted.
@@ -72,8 +72,7 @@ Change it later with **Configure** on the integration card.
 - or the `sbg_energy_export.exporter` action (fields `pas`: 5, 15 or 60, `debut`, `fin`: UTC
   dates, end excluded); it returns the file name and the link.
 
-A **notification** shows a **Download** link served by your Home Assistant, valid for one hour.
-The file also stays in `<config>/sbg_energy_export/exports/`.
+A **notification** shows a **Download** link served by your Home Assistant, valid for one hour; it opens in a new tab, which downloads the file (if nothing happens: right-click → "Open in new tab"). The file is a **ZIP archive** holding the CSV (format version 2 at 5 and 15 minutes: the past stays one line per hour): upload it as is to analyse.sbg-energy.com. It stays in `<config>/sbg_energy_export/exports/`.
 
 The **Last recorded quarter-hour** diagnostic sensor shows that recording is running (attribute:
 first recorded quarter-hour).

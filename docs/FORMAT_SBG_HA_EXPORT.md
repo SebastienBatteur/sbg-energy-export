@@ -1,4 +1,4 @@
-# Format « SBG HA export » — version 1
+# Format « SBG HA export » — versions 1 et 2
 
 Format ouvert pour transmettre à un service d'analyse (analyse.sbg-energy.com) les données du
 **tableau de bord Énergie** de Home Assistant : réseau, solaire, batterie, consommation de la maison
@@ -11,8 +11,13 @@ Produit par :
 Lu par : `sbg_optimisation/tools/contrats/lecture/ha_export.py` (lecteur déterministe, sans IA).
 
 Statut : **version 1, proposée le 06/10/2026**, étendue le même jour au **pas de 5 minutes**
-(§ 3.5 : extension compatible, la version reste 1). Rien n'est figé tant que le service ne l'a pas
-publiée ; toute évolution incompatible change le numéro de version.
+(§ 3.5 : extension compatible, la version reste 1). **Version 2 le 07/10/2026** (§ 3.6) : dans
+un fichier au pas de 5 ou 15 min, le passé connu seulement à l'heure reste en lignes horaires au
+lieu d'être découpé en 4 ou 12 parts égales. Un vrai export de trois ans au pas de 5 min avec
+plus de 20 appareils faisait 47,6 Mo en version 1 (≈ 330 000 lignes) : il fait ≈ 5 Mo en version 2
+(≈ 35 000 lignes), ≈ 0,6 Mo dans un ZIP. Deux catégories d'appareils ajoutées le même jour
+(`ventilation`, `pompe`, extension compatible des deux versions). Rien n'est figé tant que le
+service ne l'a pas publiée ; toute évolution incompatible change le numéro de version.
 
 ---
 
@@ -63,8 +68,13 @@ Le format le dit, ligne par ligne, avec la **provenance**.
 - Texte **UTF-8** (BOM toléré à la lecture), fin de ligne **LF** (CRLF toléré), séparateur **virgule**,
   point décimal, aucun guillemet.
 - Un **en-tête de métadonnées** : lignes commençant par `#`.
-- Une **ligne d'en-tête de colonnes**, puis **une ligne par pas de temps**.
+- Une **ligne d'en-tête de colonnes**, puis **une ligne par pas de temps** (version 1), ou par pas
+  de temps mesuré et par heure du passé (version 2, § 3.6).
 - Nom conseillé : `sbg_ha_export_AAAAMMJJ-HHMMSS_15min.csv` (ou `_60min`, `_5min`).
+- **Compression** (07/10/2026) : le fichier peut voyager dans une archive **ZIP** qui ne contient
+  que lui (`sbg_ha_export_…_5min.zip` → `sbg_ha_export_…_5min.csv`). L'intégration écrit ses
+  exports ainsi depuis 0.5.0 ; le formulaire du service accepte déjà les ZIP (contrôles de taille,
+  de chemins et de taux de compression). Le CSV dedans suit ce document à l'octet près.
 
 ### 3.1 Métadonnées
 
@@ -72,8 +82,8 @@ La première ligne est exactement `# SBG HA export`. Ensuite, des lignes `# clé
 
 | Clé | Obligatoire | Valeur |
 |---|---|---|
-| `version` | oui | `1` |
-| `pas_minutes` | oui | `5`, `15` ou `60` |
+| `version` | oui | `1` ou `2` (§ 3.6) |
+| `pas_minutes` | oui | `5`, `15` ou `60` ; en version 2 : le pas des lignes **mesurées au pas fin** (les lignes horaires durent une heure) |
 | `fuseau` | oui | fuseau IANA de la maison (`Europe/Brussels`) ; les instants restent en UTC, le fuseau sert aux plages tarifaires et aux habitudes |
 | `unite` | oui | `kWh` |
 | `horodatage` | non | rappel : début de l'intervalle, UTC |
@@ -112,11 +122,14 @@ par l'utilisateur dans une **liste fermée** :
 | `froid` | frigo, congélateur, cave à vin |
 | `informatique` | informatique et réseau (box, ordinateur, serveur, télévision…) |
 | `eclairage` | éclairage |
+| `ventilation` | ventilation mécanique (VMC simple ou double flux), extracteur |
+| `pompe` | pompes et traitement de l'eau : pompe de citerne, de piscine, de puits, lampe UV, adoucisseur, réservoir |
 | `autre` | tout le reste |
 
-`lavage`, `froid`, `informatique` et `eclairage` ont été ajoutés le 06/10/2026 (extension
-compatible : les fichiers qui n'utilisent que les cinq premiers codes ne changent pas ; la version
-reste 1). Un lecteur refuse un code hors de cette liste. Un appareil mesuré à l'intérieur d'un autre (option « inclus dans » du tableau Énergie,
+`lavage`, `froid`, `informatique` et `eclairage` ont été ajoutés le 06/10/2026, `ventilation` et
+`pompe` le 07/10/2026 (extensions compatibles : les fichiers qui ne les utilisent pas ne changent
+pas ; elles valent pour les versions 1 et 2). `ventilation` et `pompe` tournent souvent en continu :
+le service les compte dans la veille identifiée. Un lecteur refuse un code hors de cette liste. Un appareil mesuré à l'intérieur d'un autre (option « inclus dans » du tableau Énergie,
 `included_in_stat`) porte `inclus_dans=` vers son parent ; si le parent n'est pas exporté, la mention
 disparaît.
 
@@ -129,9 +142,10 @@ coordonnées, marque, coût, prix, gaz, eau.
 |---|---|---|
 | `mesure_5min` | période de 5 min des statistiques à court terme, telle quelle | 5 |
 | `mesure_15min` | quart d'heure calculé à partir des statistiques de 5 min (somme des 3 périodes) | 15 |
-| `mesure_60min` | heure des statistiques à long terme | 60 |
-| `heure_repartie` | heure des statistiques à long terme **répartie en parts égales** : 4 au pas de 15 min, **12** au pas de 5 min ; ce n'est **pas** une mesure au pas fin | 5, 15 |
-| `trou` | aucune donnée ; toutes les cellules sont vides | 5, 15, 60 |
+| `mesure_60min` | heure des statistiques à long terme | 60 ; en version 2 aussi 5 et 15 (la ligne dure une heure) |
+| `heure_repartie` | heure des statistiques à long terme **répartie en parts égales** : 4 au pas de 15 min, **12** au pas de 5 min ; ce n'est **pas** une mesure au pas fin | 5, 15 (version 1 seulement) |
+| `trou` | aucune donnée ; toutes les cellules sont vides ; dure le pas du fichier | 5, 15, 60 |
+| `trou_60min` | version 2 : heure entière sans donnée, en une ligne ; toutes les cellules sont vides | 5, 15 (version 2 seulement) |
 
 Dans un fichier au pas de 15 min (ou de 5 min), pour chaque heure : si au moins une période est
 mesurée, les 4 (ou 12) périodes viennent des mesures (celles qui manquent sont des `trou`) ;
@@ -148,6 +162,38 @@ fichier au pas de 5 min (pas inconnu) au lieu de le mal lire. La version reste d
 Le lecteur à jour applique au pas de 5 min les mêmes contrôles qu'au pas de 15 min (§ 4), avec
 12 parts par heure répartie ; la tolérance du bilan d'une heure répartie tient compte des
 arrondis à 4 décimales de chaque part.
+
+### 3.6 Version 2 : le passé reste horaire (07/10/2026)
+
+**Pourquoi.** En version 1, un fichier au pas de 5 min découpe chaque heure du passé en 12 lignes
+égales qui n'apportent aucune information : un vrai export de trois ans avec plus de 20 appareils faisait
+47,6 Mo, au-delà des 40 Mo du formulaire du service. La version 2 garde la même information en
+≈ 12 fois moins de lignes.
+
+**Règle.** Mêmes métadonnées, mêmes colonnes, mêmes valeurs qu'en version 1 ; seules changent
+les lignes d'une heure **sans aucune mesure au pas fin** :
+
+| Heure du passé | Version 1 (pas de 5 ou 15 min) | Version 2 |
+|---|---|---|
+| au moins une période mesurée au pas fin | 12 (ou 4) lignes au pas fin, `trou` pour celles qui manquent | **identique** |
+| connue seulement à l'heure | 12 (ou 4) lignes `heure_repartie` égales | **une** ligne `mesure_60min` (l'heure entière) |
+| inconnue | 12 (ou 4) lignes `trou` | **une** ligne `trou_60min` |
+
+**Durée d'une ligne** : une heure pour `mesure_60min` et `trou_60min`, `pas_minutes` pour les
+autres. Les lignes se suivent sans recouvrement ni vide (l'instant suivant = instant + durée) ; une
+ligne horaire commence à l'heure pile, une ligne au pas fin sur un multiple du pas, et une heure
+n'est jamais en partie horaire, en partie au pas fin. `fin` = début de la dernière ligne + sa durée.
+`heure_repartie` n'existe pas en version 2.
+
+**Qui produit quoi.** L'intégration (0.5.0) écrit ses **exports manuels** en version 2 aux pas de
+5 et 15 min, dans un ZIP (§ 3). Au pas de 60 min, les deux versions donnent le même fichier : il
+reste en **version 1**. L'**envoi direct** (API du service, par jours entiers au pas de la session)
+reste en version 1. Le script `sbg_ha_export.py` (0.3.0) écrit la version 2 aux pas fins.
+
+**Compatibilité.** Un lecteur de la version 1 refuse proprement un fichier en version 2 (version
+inconnue). Un lecteur à jour lit les deux. Pour un usage au pas fin (rapport au quart d'heure),
+une ligne `mesure_60min` de version 2 se répartit en 4 (ou 12) parts égales, au statut « réparti »,
+exactement comme `heure_repartie` en version 1.
 
 ### 3.4 Valeurs
 
@@ -168,10 +214,11 @@ arrondis à 4 décimales de chaque part.
 Un fichier qui ne respecte pas la structure (§ 3.1, 3.2, provenances, nombres) est **refusé**.
 Sinon, contrôles (bibliothèque commune `verifications.py`, ADR-035) :
 
-1. pas régulier, sans doublon ni trou de lignes ; instants alignés sur le pas ;
-2. provenances permises pour le pas ; lignes `trou` vides ; heures réparties = 4 quarts (pas de
-   15 min) ou 12 périodes (pas de 5 min) égaux, alignés sur l'heure ;
-3. énergies positives, au plus 60 kW de moyenne ; colonnes non configurées vides ;
+1. pas régulier, sans doublon ni trou de lignes ; instants alignés sur le pas (version 2 : chaque
+   ligne suit la précédente de la durée de celle-ci, lignes horaires alignées sur l'heure) ;
+2. provenances permises pour le pas et la version ; lignes `trou` et `trou_60min` vides ; heures
+   réparties = 4 quarts (pas de 15 min) ou 12 périodes (pas de 5 min) égaux, alignés sur l'heure ;
+3. énergies positives, au plus 60 kW de moyenne sur la durée de la ligne ; colonnes non configurées vides ;
 4. **bilan** de chaque ligne : `prélèvement + production − injection − charge + décharge = consommation` (à l'arrondi près) ;
 5. **appareils** : somme des appareils de premier niveau ≤ consommation (tolérance 20 Wh + 5 % par
    ligne, au plus 1 % des lignes au-dessus, et sur toute la période) ; un appareil inclus ≤ son parent ;
@@ -221,12 +268,28 @@ Lecture : à 08:30, la maison a consommé 0,75 kWh (0,6 pris au réseau + 0,25 d
 batterie), dont 0,55 pour la voiture et 0,05 pour la pompe à chaleur ; `autre_1` (0,01) fait partie
 de la pompe à chaleur et n'est pas compté deux fois.
 
+Le même exemple en **version 2** : les deux heures du passé tiennent chacune en une ligne (somme
+des 4 quarts), l'heure mesurée ne change pas.
+
+```
+# SBG HA export
+# version: 2
+# pas_minutes: 15
+(mêmes métadonnées et même en-tête de colonnes que ci-dessus)
+2026-03-10T06:00:00Z,mesure_60min,1.9,0,0,0,0.4,2.3,0,1.2,0.3
+2026-03-10T07:00:00Z,mesure_60min,0.6,0,0.3,0,0.5,1.4,0,0.8,0.2
+2026-03-10T08:00:00Z,mesure_15min,0.05,0,0.12,0.02,0,0.15,0,0.1,0.03
+2026-03-10T08:15:00Z,mesure_15min,0.02,0.01,0.2,0.05,0,0.16,0,0.08,0.02
+2026-03-10T08:30:00Z,mesure_15min,0.6,0,0.25,0.1,0,0.75,0.55,0.05,0.01
+2026-03-10T08:45:00Z,trou,,,,,,,,,
+```
+
 ## 6. Hors du format (volontairement)
 
 - **Puissance** instantanée, état de charge de la batterie, températures : pas dans la v1.
 - **Gaz et eau** : le tableau Énergie les suit, mais l'analyse électrique n'en a pas besoin.
 - **Coûts** : le service les calcule à partir des contrats, pas des réglages de Home Assistant.
-- **Compression, signature** : le fichier reste raisonnable (mesuré sur un an simulé avec
-  10 appareils, `outils/mesurer_stockage.py` : ≈ 0,8 Mo à l'heure, ≈ 3,2 Mo au quart d'heure,
-  ≈ 9,2 Mo au pas de 5 min, non compressé) ; une signature n'apporterait rien tant que
-  l'utilisateur dépose lui-même le fichier.
+- **Compression dans le format** : non ; le CSV reste lisible tel quel. Il voyage dans un ZIP
+  (§ 3) quand il est gros : le vrai export de trois ans au pas de 5 min (plus de 20 appareils) fait
+  47,6 Mo en version 1, ≈ 5 Mo en version 2, ≈ 0,6 Mo en version 2 dans un ZIP.
+- **Signature** : elle n'apporterait rien tant que l'utilisateur dépose lui-même le fichier.
