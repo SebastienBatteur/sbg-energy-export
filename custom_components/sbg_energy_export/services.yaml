@@ -1,0 +1,15 @@
+exporter:
+  fields:
+    pas:
+      default: 15
+      selector:
+        select:
+          options:
+            - "15"
+            - "60"
+    debut:
+      selector:
+        date:
+    fin:
+      selector:
+        date:

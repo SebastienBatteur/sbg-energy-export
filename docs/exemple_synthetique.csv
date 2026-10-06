@@ -1,0 +1,28 @@
+# SBG HA export
+# version: 1
+# pas_minutes: 15
+# fuseau: Europe/Brussels
+# unite: kWh
+# horodatage: debut de l'intervalle, UTC
+# debut: 2026-03-10T06:00:00Z
+# fin: 2026-03-10T09:00:00Z
+# debut_mesure_15min: 2026-03-10T08:00:00Z
+# non_configure: 
+# generateur: sbg_energy_export 0.1.0
+# genere_le: 2026-03-10T09:02:00Z
+# appareil: voiture_1;categorie=voiture
+# appareil: pac_1;categorie=pac
+# appareil: autre_1;categorie=autre;inclus_dans=pac_1
+debut_utc,provenance,prelevement_reseau,injection_reseau,production_solaire,charge_batterie,decharge_batterie,consommation_maison,voiture_1,pac_1,autre_1
+2026-03-10T06:00:00Z,heure_repartie,0.475,0,0,0,0.1,0.575,0,0.3,0.075
+2026-03-10T06:15:00Z,heure_repartie,0.475,0,0,0,0.1,0.575,0,0.3,0.075
+2026-03-10T06:30:00Z,heure_repartie,0.475,0,0,0,0.1,0.575,0,0.3,0.075
+2026-03-10T06:45:00Z,heure_repartie,0.475,0,0,0,0.1,0.575,0,0.3,0.075
+2026-03-10T07:00:00Z,heure_repartie,0.15,0,0.075,0,0.125,0.35,0,0.2,0.05
+2026-03-10T07:15:00Z,heure_repartie,0.15,0,0.075,0,0.125,0.35,0,0.2,0.05
+2026-03-10T07:30:00Z,heure_repartie,0.15,0,0.075,0,0.125,0.35,0,0.2,0.05
+2026-03-10T07:45:00Z,heure_repartie,0.15,0,0.075,0,0.125,0.35,0,0.2,0.05
+2026-03-10T08:00:00Z,mesure_15min,0.05,0,0.12,0.02,0,0.15,0,0.1,0.03
+2026-03-10T08:15:00Z,mesure_15min,0.02,0.01,0.2,0.05,0,0.16,0,0.08,0.02
+2026-03-10T08:30:00Z,mesure_15min,0.6,0,0.25,0.1,0,0.75,0.55,0.05,0.01
+2026-03-10T08:45:00Z,trou,,,,,,,,,

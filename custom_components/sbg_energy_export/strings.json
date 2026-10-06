@@ -1,0 +1,108 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Devices to export",
+        "description": "Your Energy dashboard tracks {nombre} device(s). Which ones should the file include? Their names are never exported: only a category (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Devices"
+        }
+      },
+      "selection": {
+        "title": "Selection",
+        "description": "Tick the devices to include.",
+        "data": {
+          "appareils": "Devices"
+        }
+      },
+      "categories": {
+        "title": "Categories",
+        "description": "Choose each device's category (suggested from its name)."
+      }
+    },
+    "abort": {
+      "tableau_energie_vide": "Set up the Energy dashboard first (grid, solar or battery).",
+      "single_instance_allowed": "Already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Devices to export",
+        "description": "Your Energy dashboard tracks {nombre} device(s). Which ones should the file include? Their names are never exported: only a category (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Devices"
+        }
+      },
+      "selection": {
+        "title": "Selection",
+        "description": "Tick the devices to include.",
+        "data": {
+          "appareils": "Devices"
+        }
+      },
+      "categories": {
+        "title": "Categories",
+        "description": "Choose each device's category (suggested from its name)."
+      }
+    }
+  },
+  "selector": {
+    "choix": {
+      "options": {
+        "tous": "All",
+        "aucun": "None",
+        "selection": "A selection"
+      }
+    },
+    "categorie": {
+      "options": {
+        "voiture": "Electric car",
+        "pac": "Heat pump",
+        "ballon": "Water heater",
+        "cuisson": "Cooking",
+        "autre": "Other"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "exporter_15": {
+        "name": "Export (15 min)"
+      },
+      "exporter_60": {
+        "name": "Export (hourly)"
+      }
+    },
+    "sensor": {
+      "dernier_quart": {
+        "name": "Last recorded quarter-hour",
+        "state_attributes": {
+          "premier_quart": {
+            "name": "First quarter-hour"
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "exporter": {
+      "name": "Export",
+      "description": "Writes the \"SBG HA export\" file (past data hourly, quarter-hours since installation) and notifies a local download link. Nothing is sent anywhere.",
+      "fields": {
+        "pas": {
+          "name": "Step (minutes)",
+          "description": "15 or 60."
+        },
+        "debut": {
+          "name": "Start",
+          "description": "First day (UTC). Default: start of statistics."
+        },
+        "fin": {
+          "name": "End",
+          "description": "End day, excluded (UTC). Default: current hour."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Appareils à exporter",
+        "description": "Votre tableau Énergie suit {nombre} appareil(s). Lesquels voulez-vous inclure dans le fichier ? Leurs noms ne sont jamais exportés : seulement une catégorie (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Appareils"
+        }
+      },
+      "selection": {
+        "title": "Sélection",
+        "description": "Cochez les appareils à inclure.",
+        "data": {
+          "appareils": "Appareils"
+        }
+      },
+      "categories": {
+        "title": "Catégories",
+        "description": "Choisissez la catégorie de chaque appareil (proposée d'après son nom)."
+      }
+    },
+    "abort": {
+      "tableau_energie_vide": "Configurez d'abord le tableau Énergie (réseau, solaire ou batterie).",
+      "single_instance_allowed": "Déjà configuré."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Appareils à exporter",
+        "description": "Votre tableau Énergie suit {nombre} appareil(s). Lesquels voulez-vous inclure dans le fichier ? Leurs noms ne sont jamais exportés : seulement une catégorie (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Appareils"
+        }
+      },
+      "selection": {
+        "title": "Sélection",
+        "description": "Cochez les appareils à inclure.",
+        "data": {
+          "appareils": "Appareils"
+        }
+      },
+      "categories": {
+        "title": "Catégories",
+        "description": "Choisissez la catégorie de chaque appareil (proposée d'après son nom)."
+      }
+    }
+  },
+  "selector": {
+    "choix": {
+      "options": {
+        "tous": "Tous",
+        "aucun": "Aucun",
+        "selection": "Une sélection"
+      }
+    },
+    "categorie": {
+      "options": {
+        "voiture": "Voiture électrique",
+        "pac": "Pompe à chaleur",
+        "ballon": "Ballon d'eau chaude",
+        "cuisson": "Cuisson",
+        "autre": "Autre"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "exporter_15": {
+        "name": "Exporter (15 min)"
+      },
+      "exporter_60": {
+        "name": "Exporter (horaire)"
+      }
+    },
+    "sensor": {
+      "dernier_quart": {
+        "name": "Dernier quart d'heure enregistré",
+        "state_attributes": {
+          "premier_quart": {
+            "name": "Premier quart d'heure"
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "exporter": {
+      "name": "Exporter",
+      "description": "Écrit le fichier « SBG HA export » (passé en horaire, quart d'heure depuis l'installation) et notifie un lien de téléchargement local. Rien n'est envoyé.",
+      "fields": {
+        "pas": {
+          "name": "Pas (minutes)",
+          "description": "15 ou 60."
+        },
+        "debut": {
+          "name": "Début",
+          "description": "Premier jour (UTC). Par défaut : le début des statistiques."
+        },
+        "fin": {
+          "name": "Fin",
+          "description": "Jour de fin, exclu (UTC). Par défaut : l'heure en cours."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py313"
+# Le code partagé et le script manuel visent Python 3.9 et plus.
+per-file-target-version = { "outils/sbg_ha_export.py" = "py39", "outils/script_principal.py" = "py39", "custom_components/sbg_energy_export/sbg_format.py" = "py39" }
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "PL"]
+ignore = [
+  "PLR0913", "PLR0917", "PLR2004", "PLR0912", "PLR0915", "PLR0911", "E741", "PLC0415",
+  "UP017",  # timezone.utc : le code partagé tourne aussi sous Python 3.9 (script manuel)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"outils/sbg_ha_export.py" = ["B905"]  # zip(strict=) absent de Python 3.9
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components"]
+combine-as-imports = true
