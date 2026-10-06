@@ -22,6 +22,13 @@ kWh sur la période, 6 décimales au plus ; cellule vide = inconnu. Les mois son
 des mois UTC. Les colonnes d'un mois sont toutes les statistiques enregistrées
 pendant ce mois : une statistique ajoutée en cours de mois fait réécrire le
 fichier du mois une fois avec la nouvelle colonne.
+
+Résolution dans le temps (version 0.4.0, décision du 06/10/2026, même règle que le
+service) : le pas de 5 minutes sert à comprendre les comportements, une année
+suffit ; les années précédentes servent à suivre leur évolution, le quart d'heure
+suffit. Les mois à 5 min de plus de 12 mois sont donc regroupés au quart d'heure
+(``entretenir``, paramètre ``premier_5min``), puis supprimés selon la durée de
+conservation choisie (3 ans par défaut).
 """
 from __future__ import annotations
 
@@ -206,10 +213,52 @@ def mois_limite(maintenant: int, ans: int) -> str:
     return f"{d.year - ans:04d}-{d.month:02d}"
 
 
-def entretenir(dossier: Path, mois_ouvert: str, premier_garde: str) -> tuple[int, int]:
-    """Compresse les mois terminés (avant ``mois_ouvert``) et supprime ceux
-    d'avant ``premier_garde``. Rend (nombre compressés, nombre supprimés)."""
+def _au_quart(lignes: Mapping[int, Mapping[str, float]]) -> dict[int, dict[str, float]]:
+    """Périodes de 5 min → quarts d'heure, par statistique, seulement si les 3 sont connues
+    (une valeur reconstituée à partir de deux périodes serait fausse sans le dire)."""
+    paquets: dict[int, dict[str, list[float]]] = {}
+    for t, valeurs in lignes.items():
+        for stat, v in valeurs.items():
+            paquets.setdefault(t - t % 900, {}).setdefault(stat, []).append(v)
+    sortie: dict[int, dict[str, float]] = {}
+    for q, par_stat in paquets.items():
+        complets = {s: sum(l) for s, l in par_stat.items() if len(l) == 3}
+        if complets:
+            sortie[q] = complets
+    return sortie
+
+
+def regrouper_mois(dossier: Path, mois: str, f5: Path) -> None:
+    """Fichier à 5 min d'un mois → fusionné dans le fichier au quart d'heure du même mois
+    (compressé), puis supprimé. Un quart déjà enregistré au quart d'heure est gardé tel quel."""
+    colonnes5, lignes5 = lire_fichier(f5)
+    cible = chemin(dossier, 15, mois, True)
+    clair = chemin(dossier, 15, mois, False)
+    source15 = cible if cible.exists() else (clair if clair.exists() else None)
+    colonnes, lignes = lire_fichier(source15) if source15 else ([], {})
+    for t, vals in _au_quart(lignes5).items():
+        deja = lignes.setdefault(t, {})
+        for stat, v in vals.items():
+            deja.setdefault(stat, v)
+    ecrire_fichier(cible, sorted(set(colonnes) | set(colonnes5)), lignes)
+    if source15 is not None and source15 != cible:
+        source15.unlink(missing_ok=True)
+    f5.unlink()
+
+
+def entretenir(dossier: Path, mois_ouvert: str, premier_garde: str,
+               premier_5min: str | None = None) -> tuple[int, int]:
+    """Compresse les mois terminés (avant ``mois_ouvert``), regroupe au quart d'heure les
+    mois à 5 min d'avant ``premier_5min`` (12 mois) et supprime ceux d'avant
+    ``premier_garde``. Rend (nombre compressés, nombre supprimés)."""
     compresses = supprimes = 0
+    if premier_5min is not None:
+        for pas, mois, _gz, f in fichiers(dossier):
+            if pas == 5 and premier_garde <= mois < premier_5min and mois < mois_ouvert:
+                try:
+                    regrouper_mois(dossier, mois, f)
+                except (OSError, EOFError, ValueError, gzip.BadGzipFile) as err:
+                    _LOGGER.warning("Mois à 5 min non regroupé : %s (%s)", f.name, err)
     for pas, mois, gz, f in fichiers(dossier):
         if mois < premier_garde:
             f.unlink(missing_ok=True)

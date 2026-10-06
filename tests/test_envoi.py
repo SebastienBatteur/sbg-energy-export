@@ -63,6 +63,10 @@ class Serveur:
         self.ouvertures: list[dict] = []
         self.terminees = 0
         self.revocations = 0
+        self.reglages: dict = {}                 # code postal et accord connus du service
+        self.refus_reglages: tuple[str, str] | None = None
+        self.appels_reglages: list[dict] = []
+        self.jour_min_5min = "2025-01-06"
 
     def r(self, method, url, status=200, **kw):
         return AiohttpClientMockResponse(method, url, status=status, json=kw)
@@ -98,10 +102,20 @@ class Serveur:
         chemin = url.path.split("/api/v1/ha/")[1]
         if chemin == "jours":
             plages = [[j, j] for j in sorted(self.jours)]
-            return self.r(method, url, couverture={"15": plages} if plages else {},
+            return self.r(method, url, couverture={"15": plages, "5": plages} if plages else {},
                           synchro={"permise": self.permise, "prochaine": "2026-02-02" if not self.permise else "2026-01-06",
                                    "reimports_restants": self.reimports},
-                          jour_min="2023-01-06", morceau={"octets_max": 1048576, "jours_max": 92})
+                          jour_min="2023-01-06", jour_min_5min=self.jour_min_5min,
+                          morceau={"octets_max": 1048576, "jours_max": 92},
+                          reglages={"code_postal": self.reglages.get("code_postal", ""),
+                                    "accord_amelioration": self.reglages.get("accord_amelioration", False)})
+        if chemin == "reglages":
+            d = data if isinstance(data, dict) else json.loads(data)
+            self.appels_reglages.append(d)
+            if self.refus_reglages:
+                return self.r(method, url, 403, code=self.refus_reglages[0], message=self.refus_reglages[1])
+            self.reglages = {"code_postal": d["code_postal"], "accord_amelioration": d["accord_amelioration"]}
+            return self.r(method, url, reglages=self.reglages, copies_effacees=0)
         if chemin == "synchros":
             d = data if isinstance(data, dict) else json.loads(data)
             self.ouvertures.append(d)
@@ -114,7 +128,7 @@ class Serveur:
                 return self.r(method, url, 429, code="limite_mensuelle", message="Deja envoye ce mois-ci.")
             return self.r(method, url, 201, id="session1", jour_min="2023-01-06")
         if chemin == "import":
-            self.envois.append(("?", data))
+            self.envois.append((data.decode().split("# pas_minutes: ")[1][:2].strip(), data))
             jours = sorted({l[:10] for l in data.decode().splitlines() if l[:2] == "20"})
             nouveaux = [j for j in jours if j not in self.jours]
             self.jours.update(jours)
@@ -162,7 +176,9 @@ async def _installer(hass: HomeAssistant, freezer: FrozenDateTimeFactory, tmp_pa
 @pytest.fixture
 async def connecte(hass: HomeAssistant, freezer: FrozenDateTimeFactory, tmp_path, serveur):
     with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
-        yield await _installer(hass, freezer, tmp_path, {**OPTIONS, "envoi_actif": True, "pas_envoi": 15},
+        serveur.reglages = {"code_postal": "4000", "accord_amelioration": False}
+        yield await _installer(hass, freezer, tmp_path, {**OPTIONS, "envoi_actif": True, "pas_envoi": 15,
+                                                         "code_postal": "4000"},
                                {DATA_JETON: RAFRAICHISSEMENT, DATA_SOURCE: SOURCE})
 
 
@@ -294,6 +310,10 @@ async def test_connexion_par_code_sans_mot_de_passe(hass: HomeAssistant, freezer
         entree = await _installer(hass, freezer, tmp_path, OPTIONS, {})
         r = await _options_jusqu_a_envoi(hass, entree)
         r = await hass.config_entries.options.async_configure(r["flow_id"], {"envoi_actif": True, "pas_envoi": "15"})
+        assert r["errors"] == {"code_postal": "code_postal"}              # obligatoire pour envoyer
+        assert aioclient_mock_vide(serveur)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "5000", "ameliorer_outils": True})
         assert (r["type"], r["step_id"]) == (FlowResultType.SHOW_PROGRESS, "connexion")
         assert r["description_placeholders"]["code"] == "ABCD-EFGH"
         assert r["description_placeholders"]["url"].startswith("https://auth.sbg-energy.com/")
@@ -302,10 +322,14 @@ async def test_connexion_par_code_sans_mot_de_passe(hass: HomeAssistant, freezer
         assert r["type"] is FlowResultType.CREATE_ENTRY, r
         await hass.async_block_till_done()
     assert hass.config_entries.options.async_progress() == []
-    assert entree.data[DATA_JETON] == RAFRAICHISSEMENT
+    # jeton gardé (renouvelé une fois par l'envoi des réglages, juste après la connexion)
+    assert entree.data[DATA_JETON] == "rafraichissement-SECRET-2"
     assert re.fullmatch(r"[0-9a-f]{32}", entree.data[DATA_SOURCE])
     assert entree.options["envoi_actif"] is True and entree.options["pas_envoi"] == 15
-    for secret in (RAFRAICHISSEMENT, ACCES, CODE_APPAREIL):
+    # réglages donnés au service juste après la connexion
+    assert serveur.appels_reglages == [{"source": entree.data[DATA_SOURCE], "code_postal": "5000",
+                                        "accord_amelioration": True}]
+    for secret in (RAFRAICHISSEMENT, "rafraichissement-SECRET-2", ACCES, CODE_APPAREIL):
         assert secret not in caplog.text
     assert "password" not in json.dumps(dict(entree.data)) and "secret" not in json.dumps(list(entree.data))
 
@@ -316,7 +340,8 @@ async def test_connexion_refusee(hass: HomeAssistant, freezer: FrozenDateTimeFac
     with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
         entree = await _installer(hass, freezer, tmp_path, OPTIONS, {})
         r = await _options_jusqu_a_envoi(hass, entree)
-        r = await hass.config_entries.options.async_configure(r["flow_id"], {"envoi_actif": True, "pas_envoi": "15"})
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {"envoi_actif": True, "pas_envoi": "15",
+                                                                             "code_postal": "4000"})
         assert r["type"] is FlowResultType.SHOW_PROGRESS
         await hass.async_block_till_done()
         r = await hass.config_entries.options.async_configure(r["flow_id"])
@@ -330,7 +355,7 @@ async def test_deconnexion_depuis_les_options(hass: HomeAssistant, connecte, ser
     with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
         r = await _options_jusqu_a_envoi(hass, connecte)
         r = await hass.config_entries.options.async_configure(
-            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "deconnecter": True})
+            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "4000", "deconnecter": True})
         await hass.async_block_till_done()
     assert r["type"] is FlowResultType.CREATE_ENTRY
     assert serveur.revocations == 1
@@ -352,3 +377,70 @@ def test_morceaux_et_fin_envoyable() -> None:
     assert envoi.fin_envoyable(datetime(2026, 1, 6, 0, 30, tzinfo=UTC)) == date(2026, 1, 5)
     assert envoi.fin_envoyable(datetime(2026, 1, 6, 1, 0, tzinfo=UTC)) == date(2026, 1, 6)
     assert envoi.heure_quotidienne(SOURCE)[0] in (3, 4, 5)
+
+
+def aioclient_mock_vide(serveur: Serveur) -> bool:
+    return serveur.appels_reglages == [] and serveur.ouvertures == []
+
+
+async def test_quatrieme_installation_refusee_a_la_connexion(hass: HomeAssistant, freezer: FrozenDateTimeFactory,
+                                                             tmp_path, serveur: Serveur) -> None:
+    serveur.refus_reglages = ("trop_d_installations", "Votre compte SBG a déjà 3 installations Home Assistant "
+                              "connectées, le maximum. Déconnectez-en une depuis votre compte.")
+    with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
+        entree = await _installer(hass, freezer, tmp_path, OPTIONS, {})
+        r = await _options_jusqu_a_envoi(hass, entree)
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {"envoi_actif": True, "pas_envoi": "15",
+                                                                             "code_postal": "4000"})
+        await hass.async_block_till_done()
+        r = await hass.config_entries.options.async_configure(r["flow_id"])
+    assert (r["type"], r["reason"]) == (FlowResultType.ABORT, "reglages_refuses")
+    assert "3 installations" in r["description_placeholders"]["message"]
+    assert DATA_JETON not in entree.data                              # oublié...
+    assert serveur.revocations == 1                                   # ... et retiré chez Keycloak
+    assert not entree.options.get("envoi_actif")
+
+
+async def test_accord_change_dans_les_options(hass: HomeAssistant, connecte, serveur: Serveur) -> None:
+    with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
+        r = await _options_jusqu_a_envoi(hass, connecte)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "4000", "ameliorer_outils": True})
+        assert r["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+        assert serveur.appels_reglages[-1] == {"source": SOURCE, "code_postal": "4000", "accord_amelioration": True}
+        # retrait : un appel aussi (le service efface les copies)
+        r = await _options_jusqu_a_envoi(hass, connecte)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "4000", "ameliorer_outils": False})
+        await hass.async_block_till_done()
+        assert serveur.appels_reglages[-1]["accord_amelioration"] is False
+        # refus du service : l'erreur s'affiche, rien n'est enregistré
+        serveur.refus_reglages = ("code_postal", "Code postal belge à 4 chiffres attendu.")
+        r = await _options_jusqu_a_envoi(hass, connecte)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "9999", "ameliorer_outils": False})
+        assert r["errors"] == {"base": "reglages_refuses"}
+        assert "4 chiffres" in r["description_placeholders"]["message"]
+    assert connecte.options["code_postal"] == "4000"
+
+
+async def test_vieux_jours_au_quart_d_heure_dans_une_session_a_5_min(hass: HomeAssistant, freezer, tmp_path,
+                                                                     serveur: Serveur) -> None:
+    serveur.reglages = {"code_postal": "4000", "accord_amelioration": False}
+    serveur.jour_min_5min = "2026-01-04"                             # 12 mois : ici, avant le 4 janvier
+    with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
+        await _installer(hass, freezer, tmp_path, {**OPTIONS, "envoi_actif": True, "pas_envoi": 5, "pas_5min": True,
+                                                   "code_postal": "4000"},
+                         {DATA_JETON: RAFRAICHISSEMENT, DATA_SOURCE: SOURCE})
+        await hass.services.async_call(DOMAIN, "envoyer", {}, blocking=True, return_response=True)
+    assert serveur.ouvertures[-1]["pas"] == 5
+    pas = [(p, sorted({l[:10] for l in c.decode().splitlines() if l[:2] == "20"})) for p, c in serveur.envois]
+    assert pas == [("15", ["2026-01-02", "2026-01-03"]), ("5", ["2026-01-04", "2026-01-05"])]
+
+
+async def test_reglages_redonnes_si_le_service_ne_les_a_pas(hass: HomeAssistant, connecte, serveur: Serveur) -> None:
+    serveur.reglages = {}
+    with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
+        await hass.services.async_call(DOMAIN, "envoyer", {}, blocking=True, return_response=True)
+    assert serveur.appels_reglages == [{"source": SOURCE, "code_postal": "4000", "accord_amelioration": False}]

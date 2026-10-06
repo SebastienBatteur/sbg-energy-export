@@ -1,5 +1,7 @@
 # SBG Energy Export (Home Assistant)
 
+<img src="docs/icone/icon.png" alt="SBG Energy logo" width="96" height="96">
+
 *[Version française](README.md)*
 
 Exports the data of the Home Assistant **Energy dashboard** to the open **"SBG HA export"**
@@ -18,7 +20,7 @@ yourself to an analysis service such as analyse.sbg-energy.com.
   integration picks up those ~10 days at installation, then records every quarter-hour (or,
   optionally, every 5-minute period) as it goes.
 
-> Status: **version 0.3.0, not published yet**. Name, licence and publication still to be decided.
+> Status: **version 0.4.0, not published yet**. Name, licence and publication still to be decided.
 
 ## What the export contains
 
@@ -83,13 +85,19 @@ itself** to SBG Energy's analysis service. **Nothing is sent until you turn it o
 your account.** It is the integration's **only outgoing network call**.
 
 1. **Configure** → last step **"Send to analyse.sbg-energy.com"** → tick **Send to
-   analyse.sbg-energy.com**, choose the step (15 min or hourly; 5 min with the 5-minute option).
+   analyse.sbg-energy.com**, give your **postcode** (required: Home Assistant does not know it;
+   it is used for grid tariffs, region and the area's weather, never for an address), choose the
+   step (15 min or hourly; 5 min with the 5-minute option) and, if you wish, tick **Improve SBG
+   tools** (see below; unticked by default).
 2. The screen shows a **link** and a **code**: open the link (phone or computer), sign in to your
    **SBG Energy account** (with your 6-digit code), enter the code and accept. That's all: **once**.
    - No password or secret is stored in Home Assistant: only a revocable **token**, kept in the
      config entry and never written to the logs.
-3. Give your **postcode** in your account (**Home Assistant** page of analyse.sbg-energy.com) so
-   that the report can be computed.
+3. The postcode and the tick box reach the service right after the connection: the report is
+   computed from the first send. **At most three Home Assistant installations per account**: the
+   fourth is refused at this step (nothing is enabled, the token is withdrawn); you can disconnect
+   one from your account. Changing the postcode or the tick box later, in the same step, makes one
+   call to the service when you save (account connected).
 
 What is sent, and when:
 
@@ -103,12 +111,25 @@ What is sent, and when:
 - **Re-import** (`sbg_energy_export.reimporter` action, fields `debut` and `fin`, UTC dates, end
   excluded): sends the period again and **replaces** those days at the service. **3 times per
   month** at most.
+- **5-minute step**: the service and the integration keep it for 12 months only; older days are
+  sent at 15 minutes, in the same send.
+- **500 MB at most** per account at the service (a clear message says so beyond).
 - Once a week the integration renews its token at **auth.sbg-energy.com** (no data at all);
   otherwise the connection would expire after 30 days unused.
 
 What the service does with it: **the report in your account**, updated at each send, and a
-**"better offer" e-mail alert** (no consumption data in it). Data kept **3 rolling years**,
-erasable from your account, erased if you delete your account. **Free during the beta.**
+**"better offer" e-mail alert** (no consumption data in it). The 5-minute step is kept **12
+months** there (to understand behaviours), then grouped into quarter-hours (to follow their
+evolution); everything is deleted after **3 rolling years**, erasable from your account, erased if
+you delete your account. **Free during the beta.**
+
+**Improve SBG tools** (optional tick box, **unticked by default**, the same as on the upload form:
+"I agree that SBG keeps my consumption data, pseudonymised, to improve its tools (simulator, SBG
+Home). I can withdraw this consent at any time."): **only if you tick it**, each month received is
+used, 90 days after receipt, for **postcode statistics** (monthly totals without name, published
+from 10 households) and a **pseudonymised copy** of the month's curve. Without it, none of this.
+Unticking it (here or in your account) erases the copies; totals already given, anonymous, can no
+longer be traced.
 Conditions (French): <https://analyse.sbg-energy.com/conditions/#home-assistant>.
 
 To stop: untick sending, or **Disconnect my SBG Energy account** in the same step. From your
@@ -121,7 +142,8 @@ The **Last send** diagnostic sensor shows the date of the last send.
 - `<config>/sbg_energy_export/mesures/mesures_15min_YYYY-MM.csv` (or `mesures_5min_…`): one file
   per (UTC) month, one line per period and one column per statistic. The current month is plain
   text; every **finished month is compressed** (`.csv.gz`); exports read both transparently.
-  Months older than the **retention period** are deleted.
+  With the 5-minute option, months **older than 12 months are grouped into quarter-hours**
+  (version 0.4.0); months older than the **retention period** (3 years by default) are deleted.
 - **Only what is needed**: the Energy dashboard's grid, solar and battery sources, and the devices
   you chose. These files contain your sensors' IDs: they stay inside Home Assistant, like its own
   database; anonymisation applies at export time.
@@ -131,7 +153,8 @@ The **Last send** diagnostic sensor shows the date of the last send.
   history cannot be rebuilt, and a device unticked by mistake gets its past back).
 - Space measured over one simulated year with 10 devices (`outils/mesurer_stockage.py`):
   **≈ 0.4 MB** at 15 minutes, **≈ 1 MB** at 5 minutes (up to ≈ 0.7 and 1.8 MB with meters finer
-  than 1 Wh).
+  than 1 Wh). Over **3 years** with the 5-minute option (`--trois-ans`): **2.84 MB** all at 5
+  minutes, **1.74 MB** with grouping after 12 months (39 % less).
 - `<config>/sbg_energy_export/exports/`: the exports produced (delete them whenever you like).
 - `.storage/sbg_energy_export.collecteur`: the last processed period and the recorded statistics.
 
@@ -157,7 +180,11 @@ See [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) (French):
 - `custom_components/sbg_energy_export/stockage.py`: local storage (pure Python).
 - `outils/mesurer_stockage.py`: measures storage and export size over a simulated year.
 - `custom_components/sbg_energy_export/categories.py`: suggested categories and recommended devices (fixed rules).
-- `docs/icone/`: icon (SVG, 256 and 512 px PNG), drawn in-house.
+- `custom_components/sbg_energy_export/brand/`: local brand images (official SBG Energy logo;
+  Home Assistant 2026.3 and later), `dark_*` variants for the dark theme; `docs/brands/`: the same,
+  ready for a request to the `home-assistant/brands` repository (not submitted; useful while HACS
+  does not show local images); `docs/icone/`: the README icon. All produced by
+  `outils/icones_marque.py` from the website's SVG.
 - Tests: `pytest` with `pytest-homeassistant-custom-component` (Linux or WSL; Home Assistant does
   not run on Windows), with a real in-memory SQLite recorder:
 

@@ -5,7 +5,11 @@
 Les options ont une dernière étape, « Envoi à analyse.sbg-energy.com » (désactivé
 par défaut) : l'activer lance la connexion au compte SBG Energy par un code à
 saisir sur auth.sbg-energy.com (flux « Device Authorization Grant », aucun mot de
-passe dans Home Assistant).
+passe dans Home Assistant). Depuis la version 0.4.0 (décisions du 06/10/2026), la
+même étape demande le code postal (obligatoire pour envoyer) et porte la case
+facultative « Améliorer les outils SBG », décochée par défaut, retirable à tout
+moment ; ces deux réglages partent au service quand on les enregistre (compte
+connecté), et c'est là que le service refuse une 4e installation par compte.
 
 L'écran de sélection classe les appareils par intérêt pour l'analyse (gros
 consommateurs et pilotables, puis cuisson et lavage, puis consommation de fond),
@@ -16,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Any
 
@@ -32,6 +37,9 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 import voluptuous as vol
 
@@ -47,10 +55,12 @@ from .const import (
     DATA_JETON,
     DATA_SOURCE,
     DOMAIN,
+    OPT_AMELIORER,
     OPT_APPAREILS,
     OPT_CATEGORIES,
     OPT_CHOIX,
     OPT_CINQ_MINUTES,
+    OPT_CODE_POSTAL,
     OPT_CONSERVATION,
     OPT_DECONNECTER,
     OPT_ENVOI,
@@ -61,6 +71,7 @@ from .sbg_format import CATEGORIES, appareils_du_tableau, variations
 
 _LOGGER = logging.getLogger(__name__)
 JOURS_PUISSANCE = 30  # période regardée pour la puissance typique
+CODE_POSTAL = re.compile(r"^[1-9]\d{3}$")  # Belgique : 1000 à 9999 (le service vérifie la région)
 
 
 def _nom(hass: HomeAssistant, appareil: dict[str, Any]) -> str:
@@ -266,29 +277,59 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
     async def _async_terminer(self) -> ConfigFlowResult:
         return await self.async_step_envoi()
 
+    def _reglages_connus(self) -> dict[str, Any]:
+        """Derniers réglages vus chez le service (ils ont pu changer depuis le compte), sinon les options."""
+        etat = getattr(getattr(self.config_entry, "runtime_data", None), "etat", None)
+        serveur = (etat.donnees.get("reglages") if etat else None) or {}
+        return {OPT_CODE_POSTAL: serveur.get("code_postal") or self._options.get(OPT_CODE_POSTAL, ""),
+                OPT_AMELIORER: bool(serveur.get("accord_amelioration", self._options.get(OPT_AMELIORER, False)))}
+
     async def async_step_envoi(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Envoi direct vers analyse.sbg-energy.com : désactivé par défaut."""
         connecte = bool(self.config_entry.data.get(DATA_JETON))
         erreurs: dict[str, str] = {}
+        message = ""
+        connus = self._reglages_connus()
         if user_input is not None:
             pas = int(user_input.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))
+            cp = str(user_input.get(OPT_CODE_POSTAL) or "").strip()
+            accord = bool(user_input.get(OPT_AMELIORER))
+            actif = bool(user_input.get(OPT_ENVOI))
             if pas == 5 and not self._options.get(OPT_CINQ_MINUTES):
                 erreurs[OPT_PAS_ENVOI] = "pas_5_sans_option"
+            elif (actif or cp) and not CODE_POSTAL.match(cp):
+                erreurs[OPT_CODE_POSTAL] = "code_postal"
             else:
-                self._options[OPT_ENVOI] = bool(user_input.get(OPT_ENVOI))
+                self._options[OPT_ENVOI] = actif
                 self._options[OPT_PAS_ENVOI] = pas
+                self._options[OPT_CODE_POSTAL] = cp
+                self._options[OPT_AMELIORER] = accord
                 if connecte and user_input.get(OPT_DECONNECTER):
                     await envoi.async_revoquer(self.hass, self.config_entry.data[DATA_JETON])
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data={k: v for k, v in self.config_entry.data.items() if k != DATA_JETON})
                     self._options[OPT_ENVOI] = False
                     return self.async_create_entry(data=self._options)
-                if self._options[OPT_ENVOI] and not connecte:
+                if actif and not connecte:
                     return await self.async_step_connexion()
-                return self.async_create_entry(data=self._options)
+                if connecte and cp and (cp, accord) != (connus[OPT_CODE_POSTAL], connus[OPT_AMELIORER]):
+                    # un appel, au moment où l'utilisateur enregistre (retirer l'accord efface les copies)
+                    try:
+                        await envoi.async_reglages(self.hass, self.config_entry, cp, accord)
+                    except envoi.EnvoiErreur as e:
+                        erreurs["base"] = "reglages_refuses"
+                        message = e.message
+                if not erreurs:
+                    return self.async_create_entry(data=self._options)
         pas_permis = ["5", "15", "60"] if self._options.get(OPT_CINQ_MINUTES) else ["15", "60"]
+        saisie = user_input or {}
         schema: dict[Any, Any] = {
-            vol.Required(OPT_ENVOI, default=bool(self._options.get(OPT_ENVOI, False))): BooleanSelector(),
+            vol.Required(OPT_ENVOI, default=bool(saisie.get(OPT_ENVOI, self._options.get(OPT_ENVOI, False)))):
+                BooleanSelector(),
+            vol.Optional(OPT_CODE_POSTAL, default=str(saisie.get(OPT_CODE_POSTAL, connus[OPT_CODE_POSTAL]) or "")):
+                TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+            vol.Required(OPT_AMELIORER, default=bool(saisie.get(OPT_AMELIORER, connus[OPT_AMELIORER]))):
+                BooleanSelector(),
             vol.Required(OPT_PAS_ENVOI, default=str(self._options.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))):
                 SelectSelector(SelectSelectorConfig(options=pas_permis, translation_key="pas_envoi",
                                                     mode=SelectSelectorMode.LIST)),
@@ -296,7 +337,8 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
         if connecte:
             schema[vol.Required(OPT_DECONNECTER, default=False)] = BooleanSelector()
         return self.async_show_form(step_id="envoi", data_schema=vol.Schema(schema), errors=erreurs,
-                                    description_placeholders={"compte": "connecté" if connecte else "non connecté"})
+                                    description_placeholders={"compte": "connecté" if connecte else "non connecté",
+                                                              "message": message})
 
     async def async_step_connexion(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Code à saisir sur auth.sbg-energy.com ; attend la validation (10 minutes au plus)."""
@@ -316,12 +358,26 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
             description_placeholders={"url": self._connexion.url_complete, "code": self._connexion.code})
 
     async def async_step_connecte(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Jeton gardé dans l'entrée (jamais journalisé) ; identifiant aléatoire de l'installation."""
+        """Jeton gardé dans l'entrée (jamais journalisé) ; identifiant aléatoire de l'installation ;
+        puis code postal et accord au service, qui refuse ici une 4e installation par compte."""
         assert self._tache is not None
         jeton = self._tache.result()
         donnees = {**self.config_entry.data, DATA_JETON: jeton}
         donnees.setdefault(DATA_SOURCE, envoi.nouvelle_source())
         self.hass.config_entries.async_update_entry(self.config_entry, data=donnees)
+        try:
+            await envoi.async_reglages(self.hass, self.config_entry, self._options.get(OPT_CODE_POSTAL, ""),
+                                       bool(self._options.get(OPT_AMELIORER)))
+        except envoi.EnvoiErreur as e:
+            if e.code in ("reseau", "auth"):
+                # service injoignable : la connexion est gardée, les réglages repartiront au premier envoi
+                _LOGGER.info("Réglages de l'envoi non transmis (%s) : ils le seront au premier envoi", e.code)
+                return self.async_create_entry(data=self._options)
+            # refus du service (4e installation, code postal…) : rien n'est activé, jeton oublié et révoqué
+            await envoi.async_revoquer(self.hass, jeton)
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data={k: v for k, v in self.config_entry.data.items() if k != DATA_JETON})
+            return self.async_abort(reason="reglages_refuses", description_placeholders={"message": e.message})
         return self.async_create_entry(data=self._options)
 
     async def async_step_echec(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

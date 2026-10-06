@@ -77,3 +77,28 @@ def test_migration_version_0_1(tmp_path):
     assert not ancien.exists()
     assert S.lire(tmp_path / "mesures", 15, ["sensor.import", "sensor.appareil_non_choisi"], T0, T0 + Q) == {
         "sensor.import": {T0: 0.25}, "sensor.appareil_non_choisi": {}}
+
+
+def test_cinq_minutes_regroupees_apres_12_mois(tmp_path):
+    """Décision du 06/10/2026 : 5 min pour les 12 derniers mois, puis le quart d'heure, puis
+    suppression selon la conservation."""
+    def t(a, m, j, h=0, mi=0):
+        return int(datetime(a, m, j, h, mi, tzinfo=timezone.utc).timestamp())
+
+    vieux = {t(2025, 3, 1, 0, 5 * k): 0.01 * (k + 1) for k in range(6)}       # deux quarts complets
+    vieux[t(2025, 3, 1, 0, 30)] = 0.5                                         # quart incomplet : écarté
+    recent = {t(2026, 9, 1, 0, 5 * k): 0.02 for k in range(3)}
+    S.enregistrer(tmp_path, 5, {"sensor.a": vieux})
+    S.enregistrer(tmp_path, 5, {"sensor.a": recent})
+    S.enregistrer(tmp_path, 15, {"sensor.a": {t(2025, 3, 1, 0, 0): 9.0}})   # déjà là : gardé tel quel
+    S.enregistrer(tmp_path, 5, {"sensor.a": {t(2023, 1, 1): 1.0}})
+    S.entretenir(tmp_path, "2026-10", "2023-10", "2025-10")
+    noms = sorted(f.name for f in tmp_path.iterdir())
+    assert noms == ["mesures_15min_2025-03.csv.gz", "mesures_5min_2026-09.csv.gz"]
+    _, lignes = S.lire_fichier(tmp_path / "mesures_15min_2025-03.csv.gz")
+    assert lignes == {t(2025, 3, 1, 0, 0): {"sensor.a": 9.0},
+                      t(2025, 3, 1, 0, 15): {"sensor.a": pytest.approx(0.04 + 0.05 + 0.06)}}
+    # sans le paramètre (versions précédentes) : rien n'est regroupé
+    S.enregistrer(tmp_path, 5, {"sensor.a": vieux})
+    S.entretenir(tmp_path, "2026-10", "2023-10")
+    assert (tmp_path / "mesures_5min_2025-03.csv.gz").exists()

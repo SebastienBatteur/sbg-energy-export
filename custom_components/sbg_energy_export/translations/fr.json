@@ -59,14 +59,18 @@
       },
       "envoi": {
         "title": "Envoi à analyse.sbg-energy.com",
-        "description": "**Désactivé par défaut.** Activé, l'intégration envoie à analyse.sbg-energy.com le MÊME contenu que l'export manuel (réseau, solaire, batterie, consommation de la maison et seulement les appareils choisis, sous un nom neutre, au pas choisi), au plus une fois par mois (à partir du 2), seulement les jours que le service n'a pas encore. C'est le seul appel réseau sortant de l'intégration. Finalité : le rapport de votre compte SBG Energy, mis à jour à chaque envoi, et l'alerte « meilleure offre » par e-mail. Données gardées 3 ans glissants, effaçables depuis votre compte ; gratuit pendant la bêta. Conditions : https://analyse.sbg-energy.com/conditions/#home-assistant\n\nCompte SBG Energy : {compte}.",
+        "description": "**Désactivé par défaut.** Activé, l'intégration envoie à analyse.sbg-energy.com le MÊME contenu que l'export manuel (réseau, solaire, batterie, consommation de la maison et seulement les appareils choisis, sous un nom neutre, au pas choisi), avec votre code postal, au plus une fois par mois (à partir du 2), seulement les jours que le service n'a pas encore. C'est le seul appel réseau sortant de l'intégration. Finalité : le rapport de votre compte SBG Energy, mis à jour à chaque envoi, et l'alerte « meilleure offre » par e-mail ; et seulement si vous cochez « Améliorer les outils SBG », les statistiques par code postal et une copie pseudonymisée. Pas de 5 minutes gardé 12 mois puis regroupé au quart d'heure, tout supprimé après 3 ans glissants ; 3 installations au plus par compte ; effaçable depuis votre compte ; gratuit pendant la bêta. Conditions : https://analyse.sbg-energy.com/conditions/#home-assistant\n\nCompte SBG Energy : {compte}.",
         "data": {
           "envoi_actif": "Envoyer à analyse.sbg-energy.com",
+          "code_postal": "Code postal",
+          "ameliorer_outils": "Améliorer les outils SBG",
           "pas_envoi": "Pas envoyé (minutes)",
           "deconnecter": "Déconnecter mon compte SBG Energy"
         },
         "data_description": {
           "envoi_actif": "Le cocher lance la connexion à votre compte SBG Energy : un code à saisir sur auth.sbg-energy.com. Aucun mot de passe n'est enregistré dans Home Assistant.",
+          "code_postal": "Obligatoire pour envoyer (Home Assistant ne le connaît pas). Il sert aux tarifs du réseau, à la région et à la météo de la zone, jamais à une adresse. Modifiable aussi dans votre compte.",
+          "ameliorer_outils": "Facultatif, décoché par défaut. « J'accepte que SBG garde mes données de consommation, pseudonymisées, pour améliorer ses outils (simulateur, SBG Home). Je peux retirer cet accord à tout moment. » Seulement si coché : chaque mois reçu sert, 90 jours après, aux statistiques par code postal (totaux mensuels sans nom, publiés à partir de 10 foyers) et à une copie pseudonymisée. Décocher efface les copies ; les totaux déjà versés, anonymes, ne peuvent plus être retrouvés.",
           "pas_envoi": "5 seulement avec l'option « pas plus fin : 5 minutes ».",
           "deconnecter": "Oublie la connexion ici et la retire chez SBG Energy ; plus rien n'est envoyé."
         }
@@ -81,10 +85,13 @@
     },
     "abort": {
       "auth_injoignable": "auth.sbg-energy.com est injoignable : rien n'a été activé. Réessayez plus tard.",
-      "connexion_echouee": "Connexion non faite : {message} Rien n'a été activé."
+      "connexion_echouee": "Connexion non faite : {message} Rien n'a été activé.",
+      "reglages_refuses": "Connexion non activée : {message} Le jeton a été oublié et retiré."
     },
     "error": {
-      "pas_5_sans_option": "Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes »."
+      "pas_5_sans_option": "Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes ».",
+      "code_postal": "Code postal belge à 4 chiffres attendu (obligatoire pour envoyer).",
+      "reglages_refuses": "Le service a refusé : {message}"
     }
   },
   "selector": {

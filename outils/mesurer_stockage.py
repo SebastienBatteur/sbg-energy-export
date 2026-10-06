@@ -2,6 +2,7 @@
 """Mesure de la place prise par le stockage local et par l'export, sur un an simulé.
 
     python outils/mesurer_stockage.py [--appareils 10] [--annee 2025]
+    python outils/mesurer_stockage.py --trois-ans [--appareils 10]
 
 Simule une maison (réseau, solaire, batterie, et N appareils : frigo, congélateur,
 pompe à chaleur, ballon, voiture, cuisson, lave-linge, lave-vaisselle,
@@ -17,6 +18,10 @@ plupart des compteurs d'énergie suivis par Home Assistant. Puis :
 * produit l'export « SBG HA export » d'un an (``sbg_format.exporter``) au pas de
   60, 15 et 5 min, comme si l'intégration tournait depuis un an, et mesure sa
   taille non compressée.
+
+Avec ``--trois-ans`` (décision du 06/10/2026) : trois ans simulés au pas de 5 min, stockés
+AVANT (tout à 5 min, versions ≤ 0.3.0) et APRÈS (5 min pour les 12 derniers mois, puis le
+quart d'heure : ``stockage.entretenir(..., premier_5min)``, version 0.4.0).
 
 Python 3.9+, bibliothèque standard seulement ; n'importe pas Home Assistant.
 """
@@ -183,11 +188,50 @@ def taille_clair(dossier: Path) -> int:
     return sum(len(gzip.decompress(f.read_bytes())) for f in dossier.glob("*.csv.gz"))
 
 
+def trois_ans(n_appareils: int, annee: int) -> None:
+    """Trois ans (annee-2 à annee) au pas de 5 min : avant / après le regroupement à 12 mois."""
+    import shutil
+    mo = 1e6
+    t0 = time.time()
+    with tempfile.TemporaryDirectory() as tmp:
+        avant = Path(tmp) / "avant"
+        for k, a in enumerate(range(annee - 2, annee + 1)):
+            _ids, brut = simuler(a, n_appareils, graine=2026 + k)
+            wh = au_wh(brut)
+            jours: dict[int, dict[str, dict[int, float]]] = {}
+            for s, par_t in wh.items():
+                for t, v in par_t.items():
+                    jours.setdefault(t // 86400, {}).setdefault(s, {})[t] = v
+            for j in sorted(jours):
+                stockage.enregistrer(avant, 5, jours[j])
+            stockage.entretenir(avant, f"{a + 1}-01", f"{annee - 2}-01")
+        apres = Path(tmp) / "apres"
+        shutil.copytree(avant, apres)
+        # 12 derniers mois à 5 min (l'année la plus récente), le reste regroupé au quart d'heure
+        stockage.entretenir(apres, f"{annee + 1}-01", f"{annee - 2}-01", f"{annee}-01")
+
+        def taille(d: Path) -> tuple[float, int, int]:
+            f = list(d.glob("*.csv.gz"))
+            return (sum(x.stat().st_size for x in f) / mo, sum(1 for x in f if "_5min_" in x.name),
+                    sum(1 for x in f if "_15min_" in x.name))
+
+        ta, tb = taille(avant), taille(apres)
+        print(f"Trois ans simulés ({annee - 2}-{annee}), 5 sources + {n_appareils} appareils, compteurs au Wh "
+              f"({time.time() - t0:.0f} s) :")
+        print(f"  avant (tout à 5 min)                      : {ta[0]:6.2f} Mo ({ta[1]} mois à 5 min)")
+        print(f"  après (5 min 12 mois, puis quart d'heure) : {tb[0]:6.2f} Mo ({tb[1]} mois à 5 min, "
+              f"{tb[2]} au quart d'heure), {100 * (1 - tb[0] / ta[0]):.0f} % de moins")
+
+
 def principal(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--appareils", type=int, default=10)
     p.add_argument("--annee", type=int, default=2025)
+    p.add_argument("--trois-ans", action="store_true")
     a = p.parse_args(argv)
+    if a.trois_ans:
+        trois_ans(a.appareils, a.annee)
+        return 0
     t0 = time.time()
     ids, brut = simuler(a.annee, a.appareils)
     wh = au_wh(brut)

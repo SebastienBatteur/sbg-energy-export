@@ -1,5 +1,7 @@
 # SBG Energy Export (Home Assistant)
 
+<img src="docs/icone/icon.png" alt="Logo SBG Energy" width="96" height="96">
+
 *[English version](README.en.md)*
 
 Exporte les données du **tableau de bord Énergie** de Home Assistant au format ouvert
@@ -19,7 +21,7 @@ sur un service d'analyse comme analyse.sbg-energy.com.
   L'intégration reprend ces ~10 jours à l'installation, puis enregistre chaque quart d'heure (ou,
   en option, chaque période de 5 minutes) au fil de l'eau.
 
-> Statut : **version 0.3.0, pas encore publiée**. Nom, licence et publication à décider.
+> Statut : **version 0.4.0, pas encore publiée**. Nom, licence et publication à décider.
 
 ## Ce que contient l'export
 
@@ -87,16 +89,21 @@ Au lieu de télécharger le fichier et de le déposer vous-même, l'intégration
 activé ET connecté votre compte.** C'est le **seul appel réseau sortant** de l'intégration.
 
 1. **Configurer** → dernière étape **« Envoi à analyse.sbg-energy.com »** → cocher **Envoyer à
-   analyse.sbg-energy.com**, choisir le pas (15 min ou horaire ; 5 min avec l'option des
-   5 minutes).
+   analyse.sbg-energy.com**, donner votre **code postal** (obligatoire : Home Assistant ne le
+   connaît pas ; il sert aux tarifs du réseau, à la région et à la météo de la zone, jamais à une
+   adresse), choisir le pas (15 min ou horaire ; 5 min avec l'option des 5 minutes) et, si vous
+   le voulez, cocher **Améliorer les outils SBG** (voir plus bas ; décoché par défaut).
 2. L'écran affiche un **lien** et un **code** : ouvrez le lien (sur votre téléphone ou votre
    ordinateur), connectez-vous à votre **compte SBG Energy** (avec votre code à 6 chiffres),
    saisissez le code et acceptez. C'est tout : **une seule fois**.
    - Aucun mot de passe ni secret n'est enregistré dans Home Assistant : seulement un **jeton**
      (un « laissez-passer » révocable) gardé dans l'entrée de configuration, jamais écrit dans
      les journaux.
-3. Donnez votre **code postal** dans votre compte (page **Home Assistant** de
-   analyse.sbg-energy.com) pour que le rapport se calcule.
+3. Le code postal et la case partent au service juste après la connexion : le rapport se
+   calcule dès le premier envoi. **Trois installations Home Assistant au plus par compte** : la
+   quatrième est refusée à cette étape (rien n'est activé, le jeton est retiré) ; vous pouvez en
+   déconnecter une depuis votre compte. Changer le code postal ou la case plus tard, dans la même
+   étape, fait un appel au service au moment où vous enregistrez (compte connecté).
 
 Ce qui part, et quand :
 
@@ -110,14 +117,28 @@ Ce qui part, et quand :
 - **Réimporter** (service `sbg_energy_export.reimporter`, champs `debut` et `fin`, dates UTC, fin
   exclue) : renvoie la période et **remplace** ces jours côté service (par exemple après avoir
   corrigé une statistique). **3 fois par mois** au plus.
+- **Pas de 5 minutes** : le service et l'intégration ne le gardent que 12 mois ; les jours plus
+  anciens partent au quart d'heure, dans le même envoi.
+- **500 Mo au plus** par compte côté service (un message clair le dit au-delà).
 - Une fois par semaine, l'intégration renouvelle son jeton auprès de **auth.sbg-energy.com**
   (sans aucune donnée) : sans cela, la connexion expirerait après 30 jours sans usage.
 
 Ce que le service en fait : **le rapport de votre compte**, mis à jour à chaque envoi, et une
 **alerte « meilleure offre »** par e-mail (sans aucune donnée de consommation) quand une offre
 analysée est moins chère que votre contrat d'au moins 40 € et 5 % par an, deux mois de suite.
-Données gardées **3 ans glissants**, effaçables depuis votre compte, effacées si vous supprimez
-votre compte. **Gratuit pendant la bêta.** Conditions :
+Le pas de 5 minutes y est gardé **12 mois** (pour comprendre les comportements), puis regroupé au
+quart d'heure (pour suivre leur évolution) ; tout est supprimé après **3 ans glissants**,
+effaçable depuis votre compte, effacé si vous supprimez votre compte. **Gratuit pendant la
+bêta.**
+
+**Améliorer les outils SBG** (case facultative, **décochée par défaut**, la même que sur le
+formulaire de dépôt : « J'accepte que SBG garde mes données de consommation, pseudonymisées, pour
+améliorer ses outils (simulateur, SBG Home). Je peux retirer cet accord à tout moment. ») :
+**seulement si vous la cochez**, chaque mois reçu sert, 90 jours après sa réception, aux
+**statistiques par code postal** (totaux mensuels sans nom, publiés à partir de 10 foyers) et à
+une **copie pseudonymisée** de la courbe du mois. Sans la case, rien de tout cela. La décocher (ici
+ou dans votre compte) efface les copies ; les totaux déjà versés, anonymes, ne peuvent plus être
+retrouvés. Conditions :
 <https://analyse.sbg-energy.com/conditions/#home-assistant>.
 
 Arrêter : décocher l'envoi (plus rien ne part), ou **Déconnecter mon compte SBG Energy** dans la
@@ -132,8 +153,9 @@ envoi permis, jours envoyés).
 - `<config>/sbg_energy_export/mesures/mesures_15min_AAAA-MM.csv` (ou `mesures_5min_…`) : un
   fichier par mois (UTC), une ligne par période et une colonne par statistique. Le mois en cours
   est en clair ; chaque **mois terminé est compressé** (`.csv.gz`) ; l'export lit les deux sans
-  que vous ayez rien à faire. Les mois plus anciens que la **durée de conservation** sont
-  supprimés.
+  que vous ayez rien à faire. Avec l'option des 5 minutes, les mois de **plus de 12 mois sont
+  regroupés au quart d'heure** (version 0.4.0) ; les mois plus anciens que la **durée de
+  conservation** (3 ans par défaut) sont supprimés.
 - **Seulement le nécessaire** : les sources réseau, solaire et batterie du tableau Énergie, et les
   appareils que vous avez choisis. Ces fichiers contiennent les identifiants de vos capteurs : ils
   restent dans Home Assistant, comme sa propre base de données ; l'anonymisation s'applique à
@@ -145,7 +167,8 @@ envoi permis, jours envoyés).
   retrouve ainsi son passé).
 - Place mesurée sur un an simulé, 10 appareils (`outils/mesurer_stockage.py`) : **≈ 0,4 Mo** au
   quart d'heure, **≈ 1 Mo** au pas de 5 minutes (jusqu'à ≈ 0,7 et 1,8 Mo avec des compteurs plus
-  précis que le Wh).
+  précis que le Wh). Sur **3 ans** avec l'option des 5 minutes (`--trois-ans`) : **2,84 Mo** tout à
+  5 minutes, **1,74 Mo** avec le regroupement après 12 mois (39 % de moins).
 - `<config>/sbg_energy_export/exports/` : les exports produits (à supprimer quand vous voulez).
 - `.storage/sbg_energy_export.collecteur` : la dernière période traitée, les statistiques suivies.
 - `.storage/sbg_energy_export.envoi` (envoi direct seulement) : date du dernier envoi et du prochain permis ; le jeton est dans l'entrée de configuration (`.storage/core.config_entries`), comme pour les autres intégrations.
@@ -173,7 +196,11 @@ Voir [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) :
 - `custom_components/sbg_energy_export/stockage.py` : le stockage local (Python pur).
 - `outils/mesurer_stockage.py` : mesure de la place prise (stockage et export) sur un an simulé.
 - `custom_components/sbg_energy_export/categories.py` : catégories proposées et appareils recommandés (règles fixes).
-- `docs/icone/` : icône (SVG, PNG 256 et 512 px), dessin maison.
+- `custom_components/sbg_energy_export/brand/` : images de marque locales (logo officiel SBG
+  Energy ; Home Assistant 2026.3 et plus), variantes `dark_*` pour le thème sombre ;
+  `docs/brands/` : les mêmes, prêtes pour une demande au dépôt `home-assistant/brands` (pas
+  soumise ; utile tant que HACS n'affiche pas les images locales) ; `docs/icone/` : l'icône du
+  README. Tout est produit par `outils/icones_marque.py` à partir du SVG du site.
 - Tests : `pytest` avec `pytest-homeassistant-custom-component` (Linux ou WSL ; Home Assistant ne
   tourne pas sous Windows), un vrai recorder SQLite en mémoire :
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Envoi direct vers analyse.sbg-energy.com (version 0.3.0). DÉSACTIVÉ par défaut.
+"""Envoi direct vers analyse.sbg-energy.com (versions 0.3.0 et 0.4.0). DÉSACTIVÉ par défaut.
 
 Rien ne part tant que l'utilisateur n'a pas, dans les options de l'intégration,
 coché « Envoyer à analyse.sbg-energy.com » ET connecté son compte SBG Energy.
@@ -23,6 +23,13 @@ coché « Envoyer à analyse.sbg-energy.com » ET connecté son compte SBG Energ
   REMPLACE ces jours côté service (3 fois par mois au plus, côté service).
 * Le jeton hors ligne expire après 30 jours sans usage : il est renouvelé une
   fois par semaine (appel à auth.sbg-energy.com seulement, aucune donnée).
+* **Réglages de l'installation** (0.4.0, décisions du 06/10/2026) : le code postal,
+  OBLIGATOIRE pour envoyer, et la case facultative « Améliorer les outils SBG »
+  partent au service quand l'utilisateur les enregistre dans les options (compte
+  connecté) et juste après la connexion du compte : c'est là que le service refuse
+  une 4e installation pour le même compte (le jeton est alors oublié et révoqué).
+* **Pas de 5 min** : le service et l'intégration ne gardent le pas de 5 min que
+  12 mois ; les jours plus anciens partent au quart d'heure, dans la même session.
 """
 from __future__ import annotations
 
@@ -51,6 +58,8 @@ from .const import (
     DOMAIN,
     JOURS_PAR_MORCEAU,
     OCTETS_MAX,
+    OPT_AMELIORER,
+    OPT_CODE_POSTAL,
     OPT_ENVOI,
     OPT_PAS_ENVOI,
     PAS_ENVOI_DEFAUT,
@@ -289,8 +298,23 @@ class Bilan:
     compte: str | None = None
 
 
+async def async_reglages(hass: HomeAssistant, entree: ConfigEntry, code_postal: str, accord: bool) -> dict[str, Any]:
+    """Code postal et accord « Améliorer les outils SBG » de cette installation, au service.
+    Lève EnvoiErreur (message du service tel quel : 4e installation, code postal inconnu…)."""
+    etat: Etat = entree.runtime_data.etat
+    r = await Client(hass, entree, etat).async_requete(
+        "POST", "reglages", json={"source": entree.data.get(DATA_SOURCE), "code_postal": code_postal,
+                                  "accord_amelioration": bool(accord)})
+    await etat.async_noter(reglages=r.get("reglages"))
+    return r
+
+
 async def _envoyer_jours(hass: HomeAssistant, entree: ConfigEntry, client: Client, sid: str, mode: str, pas: int,
                          jours: list[date], limites: dict[str, int], bilan: Bilan) -> None:
+    """Envoie ``jours`` au pas ``pas`` (celui de la session, ou 15 pour les vieux jours d'une
+    session à 5 min)."""
+    if not jours:
+        return
     collecteur = entree.runtime_data.collecteur
     if pas != 60:
         await collecteur.async_rattraper()
@@ -325,6 +349,12 @@ async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode:
     pas = int(entree.options.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))
     client = Client(hass, entree, etat)
     j = await client.async_requete("GET", "jours", params={"source": source, "pas": str(pas)})
+    serveur = j.get("reglages") or {}
+    await etat.async_noter(reglages=serveur)
+    cp = str(entree.options.get(OPT_CODE_POSTAL) or "")
+    if cp and not serveur.get("code_postal"):
+        # réglages pas encore arrivés au service (réseau coupé à la connexion) : on les redonne
+        await async_reglages(hass, entree, cp, bool(entree.options.get(OPT_AMELIORER)))
     synchro = j.get("synchro") or {}
     if mode == "complement" and not synchro.get("permise"):
         await etat.async_noter(prochaine=synchro.get("prochaine"))
@@ -347,8 +377,14 @@ async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode:
         jours = [premier + timedelta(days=k) for k in range(max(0, (fin - premier).days))
                  if premier + timedelta(days=k) not in deja]
     bilan = Bilan()
+    # Pas de 5 min gardé 12 mois (service et intégration) : les jours plus anciens partent au
+    # quart d'heure, dans la même session (le service l'accepte pour une session à 5 min).
+    limite_5 = date.fromisoformat(j["jour_min_5min"]) if pas == 5 and j.get("jour_min_5min") else None
+    vieux = [d for d in jours if limite_5 and d < limite_5]
+    recents = [d for d in jours if not (limite_5 and d < limite_5)]
     try:
-        await _envoyer_jours(hass, entree, client, s["id"], mode, pas, jours, j.get("morceau") or {}, bilan)
+        await _envoyer_jours(hass, entree, client, s["id"], mode, 15, vieux, j.get("morceau") or {}, bilan)
+        await _envoyer_jours(hass, entree, client, s["id"], mode, pas, recents, j.get("morceau") or {}, bilan)
     finally:
         # même interrompu, la session est fermée : les jours arrivés comptent et le rapport se recalcule
         try:
@@ -379,8 +415,8 @@ def _texte_bilan(b: Bilan, mode: str) -> str:
     if b.refuses:
         lignes.append(f"{b.refuses} jour(s) refusés par le service (incomplets ou trop anciens).")
     if b.rapport == "reglages_manquants":
-        lignes.append("Pour obtenir votre rapport, donnez votre code postal dans votre compte : "
-                      f"{b.compte or 'analyse.sbg-energy.com/home-assistant/'}")
+        lignes.append("Pour obtenir votre rapport, donnez votre code postal dans les options de l'intégration "
+                      f"ou dans votre compte : {b.compte or 'analyse.sbg-energy.com/home-assistant/'}")
     elif b.rapport == "calcul":
         lignes.append("Votre rapport se met à jour dans votre compte.")
     if b.prochaine:

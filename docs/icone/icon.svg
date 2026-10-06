@@ -1,6 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <rect width="256" height="256" rx="48" fill="#0f766e"/>
-  <polygon points="140,28 76,140 122,140 108,228 180,116 134,116 172,28" fill="#ffffff"/>
-  <polyline points="196,168 232,168 232,204" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="232" y1="168" x2="190" y2="210" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 156.34207 152.12625"><g transform="translate(-34.522733,-59.44796)" fill="#0b0b0c"><circle cy="147.5" cx="105" r="21.5"/><path id="sbg-arc" stroke="#0b0b0c" stroke-width="0.264583" d="m 119.92294,188.78424 c 22.79265,-3.79186 41.63338,-8.33975 67.96233,-34.70034 2.65219,-2.65537 3.60653,-1.92561 2.19477,2.40409 -10.67432,32.73681 -51.54502,53.77361 -79.25214,53.6918 -27.707117,-0.0818 -52.337605,-16.73787 -59.946052,-28.58733 -1.650343,-2.57026 1.631155,-3.69377 2.876712,-3.0565 28.167994,14.41163 56.29855,11.88959 66.16438,10.24828 z"/><use href="#sbg-arc" transform="rotate(127.96517,105.10224,147.36657)"/><use href="#sbg-arc" transform="rotate(-118.50325,104.48268,142.44649)"/></g></svg>

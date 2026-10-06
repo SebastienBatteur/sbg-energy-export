@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "sbg_energy_export"
-VERSION: Final = "0.3.0"
+VERSION: Final = "0.4.0"
 
 # Dossier de travail, dans le dossier de configuration de Home Assistant.
 DOSSIER: Final = "sbg_energy_export"
@@ -42,6 +42,11 @@ VALIDITE_LIEN_H: Final = 1
 OPT_ENVOI: Final = "envoi_actif"
 OPT_PAS_ENVOI: Final = "pas_envoi"
 OPT_DECONNECTER: Final = "deconnecter"
+# Version 0.4.0 (décisions du 06/10/2026) : code postal OBLIGATOIRE pour envoyer (Home
+# Assistant ne le connaît pas ; tarifs du réseau, région, météo de la zone, jamais
+# d'adresse) et case FACULTATIVE « Améliorer les outils SBG », décochée par défaut.
+OPT_CODE_POSTAL: Final = "code_postal"
+OPT_AMELIORER: Final = "ameliorer_outils"
 PAS_ENVOI_DEFAUT: Final = 15
 DATA_JETON: Final = "jeton_rafraichissement"   # jeton de rafraîchissement (jamais journalisé)
 DATA_SOURCE: Final = "source"                   # identifiant ALÉATOIRE de cette installation

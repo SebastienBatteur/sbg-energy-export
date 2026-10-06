@@ -24,7 +24,9 @@ et batterie du tableau Énergie, et les appareils choisis par l'utilisateur.
   la fin de la durée de conservation, sans être exporté : un historique fin ne
   se reconstruit pas, et un appareil décoché par erreur ou remis plus tard
   retrouve ainsi son passé. Rien ne quitte Home Assistant.
-* **Mois terminés** compressés, mois au-delà de la durée de conservation supprimés.
+* **Mois terminés** compressés ; mois à 5 min de plus de 12 mois regroupés au quart
+  d'heure (le pas de 5 min sert à comprendre les comportements, une année suffit) ;
+  mois au-delà de la durée de conservation supprimés.
 """
 from __future__ import annotations
 
@@ -259,9 +261,12 @@ class Collecteur:
             self.pas_enregistre = self.pas
             await self._async_sauver()
 
+            # 5 min pour les 12 derniers mois, puis le quart d'heure, puis suppression selon la
+            # conservation choisie (décision du 06/10/2026, même règle que le service).
             await self.hass.async_add_executor_job(
                 stockage.entretenir, self.dossier, stockage.mois_de(self.prochain),
                 stockage.mois_limite(int(maintenant), self.conservation_ans),
+                stockage.mois_limite(int(maintenant), 1),
             )
             for rappel in list(self._ecouteurs):
                 rappel()

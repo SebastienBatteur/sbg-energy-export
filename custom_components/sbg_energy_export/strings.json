@@ -59,14 +59,18 @@
       },
       "envoi": {
         "title": "Send to analyse.sbg-energy.com",
-        "description": "**Off by default.** When on, the integration sends the SAME content as the manual export (grid, solar, battery, house consumption and only the devices you chose, under a neutral name, at the chosen step) to analyse.sbg-energy.com, at most once a month (from the 2nd), only the days the service does not have yet. It is the integration's only outgoing network call. Purpose: the report in your SBG Energy account, updated at each send, and the \"better offer\" e-mail alert. Data kept 3 rolling years, erasable from your account; free during the beta. Conditions: https://analyse.sbg-energy.com/conditions/#home-assistant\n\nSBG Energy account: {compte}.",
+        "description": "**Off by default.** When on, the integration sends the SAME content as the manual export (grid, solar, battery, house consumption and only the devices you chose, under a neutral name, at the chosen step) to analyse.sbg-energy.com, with your postcode, at most once a month (from the 2nd), only the days the service does not have yet. It is the integration's only outgoing network call. Purpose: the report in your SBG Energy account, updated at each send, and the \"better offer\" e-mail alert; and only if you tick \"Improve SBG tools\", postcode statistics and a pseudonymised copy. 5-minute step kept 12 months then grouped into quarter-hours, everything deleted after 3 rolling years; at most 3 installations per account; erasable from your account; free during the beta. Conditions: https://analyse.sbg-energy.com/conditions/#home-assistant\n\nSBG Energy account: {compte}.",
         "data": {
           "envoi_actif": "Send to analyse.sbg-energy.com",
+          "code_postal": "Postcode",
+          "ameliorer_outils": "Improve SBG tools",
           "pas_envoi": "Step sent (minutes)",
           "deconnecter": "Disconnect my SBG Energy account"
         },
         "data_description": {
           "envoi_actif": "Ticking it starts the connection to your SBG Energy account: a code to enter on auth.sbg-energy.com. No password is stored in Home Assistant.",
+          "code_postal": "Required to send (Home Assistant does not know it). Used for grid tariffs, region and the area's weather, never for an address. Can also be changed in your account.",
+          "ameliorer_outils": "Optional, unticked by default. \"I agree that SBG keeps my consumption data, pseudonymised, to improve its tools (simulator, SBG Home). I can withdraw this consent at any time.\" Only if ticked: each month received is used, 90 days later, for postcode statistics (monthly totals without name, published from 10 households) and a pseudonymised copy. Unticking erases the copies; totals already given, anonymous, can no longer be traced.",
           "pas_envoi": "5 only with the \"finest step: 5 minutes\" option.",
           "deconnecter": "Forgets the connection here and withdraws it at SBG Energy; nothing is sent anymore."
         }
@@ -81,10 +85,13 @@
     },
     "abort": {
       "auth_injoignable": "auth.sbg-energy.com cannot be reached: nothing was enabled. Try again later.",
-      "connexion_echouee": "Connection not completed: {message} Nothing was enabled."
+      "connexion_echouee": "Connection not completed: {message} Nothing was enabled.",
+      "reglages_refuses": "Sending not enabled: {message} The token was forgotten and withdrawn."
     },
     "error": {
-      "pas_5_sans_option": "The 5-minute step needs the \"finest step: 5 minutes\" option."
+      "pas_5_sans_option": "The 5-minute step needs the \"finest step: 5 minutes\" option.",
+      "code_postal": "A 4-digit Belgian postcode is required to send.",
+      "reglages_refuses": "The service refused: {message}"
     }
   },
   "selector": {
