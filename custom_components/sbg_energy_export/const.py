@@ -35,7 +35,7 @@ ATTR_FIN: Final = "fin"
 DELAI_QUART_S: Final = 120
 VALIDITE_LIEN_H: Final = 1
 
-# Envoi direct vers analyse.sbg-energy.com (version 0.3.0, ADR-038). DÉSACTIVÉ par
+# Envoi direct vers analyse.sbg-energy.com (version 0.3.0). DÉSACTIVÉ par
 # défaut : seul appel réseau sortant de l'intégration, et seulement si le client
 # l'active ET connecte son compte SBG Energy (flux « Device Authorization Grant »
 # de Keycloak, client PUBLIC : aucun mot de passe ni secret dans Home Assistant).

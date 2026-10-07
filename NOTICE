@@ -2,3 +2,7 @@ SBG Energy Export
 Copyright 2026 Sébastien Batteur / SBG Energy
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The SBG Energy name and logo (custom_components/sbg_energy_export/brand/, docs/brands/,
+docs/icone/) identify SBG Energy. As stated in section 6 of the Apache License, the licence
+does not grant permission to use them, except to describe the origin of the work.

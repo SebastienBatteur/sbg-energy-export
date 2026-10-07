@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+# Validation Home Assistant (hassfest) et HACS, à chaque poussée, chaque demande de fusion et
+# chaque nuit (les règles de hassfest et de HACS évoluent sans que le dépôt change).
+name: Validation
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # Les images de marque sont dans custom_components/sbg_energy_export/brand/
+          # (Home Assistant 2026.3 et plus), pas encore dans home-assistant/brands.
+          # Retirer cette ligne une fois la demande au dépôt brands acceptée.
+          ignore: brands

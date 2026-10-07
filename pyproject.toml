@@ -17,7 +17,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"outils/sbg_ha_export.py" = ["B905"]  # zip(strict=) absent de Python 3.9
+"outils/sbg_ha_export.py" = ["B905", "E402"]  # zip(strict=) absent de Python 3.9 ; fichier assemblé (blocs recopiés)
+"outils/script_principal.py" = ["F821"]  # fragment : les noms viennent du bloc sbg_format recopié devant lui
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true

@@ -1,0 +1,203 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Zu exportierende Geräte",
+        "description": "Ihr Energie-Dashboard erfasst {nombre} Gerät(e). Welche soll die Datei enthalten? Ihre Namen werden nie exportiert: nur eine Kategorie (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Geräte",
+          "conservation_ans": "Lokale Daten aufbewahren (Jahre)",
+          "pas_5min": "Feinster Schritt: 5 Minuten"
+        },
+        "data_description": {
+          "conservation_ans": "Fein aufgelöste Aufzeichnungen bleiben in Home Assistant (abgeschlossene Monate komprimiert). Ältere Monate werden gelöscht.",
+          "pas_5min": "Standardmäßig aus. Speichert 5-Minuten-Zeiträume statt Viertelstunden (etwa 2,5-mal mehr Speicherplatz): Starts und Zyklen machen Geräte leichter erkennbar. Exporte sind dann mit 5 oder 15 Minuten möglich."
+        }
+      },
+      "selection": {
+        "title": "Auswahl",
+        "description": "Die Geräte sind vom nützlichsten zum am wenigsten nützlichen für die Analyse geordnet: große und steuerbare Verbraucher (Auto, Wärmepumpe, Warmwasser), dann Kochen und Waschen, dann Grundlast (Kühlung, IT, Beleuchtung, Lüftung, Pumpen). Die empfohlenen sind angehakt; Sie entscheiden frei.",
+        "data": {
+          "appareils": "Geräte"
+        }
+      },
+      "categories": {
+        "title": "Kategorien",
+        "description": "Wählen Sie die Kategorie jedes Geräts (vorgeschlagen anhand seines Namens, seines Home-Assistant-Geräts und seiner typischen Leistung)."
+      }
+    },
+    "abort": {
+      "tableau_energie_vide": "Richten Sie zuerst das Energie-Dashboard ein (Netz, Solar oder Batterie).",
+      "single_instance_allowed": "Bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Zu exportierende Geräte",
+        "description": "Ihr Energie-Dashboard erfasst {nombre} Gerät(e). Welche soll die Datei enthalten? Ihre Namen werden nie exportiert: nur eine Kategorie (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Geräte",
+          "conservation_ans": "Lokale Daten aufbewahren (Jahre)",
+          "pas_5min": "Feinster Schritt: 5 Minuten"
+        },
+        "data_description": {
+          "conservation_ans": "Fein aufgelöste Aufzeichnungen bleiben in Home Assistant (abgeschlossene Monate komprimiert). Ältere Monate werden gelöscht.",
+          "pas_5min": "Standardmäßig aus. Speichert 5-Minuten-Zeiträume statt Viertelstunden (etwa 2,5-mal mehr Speicherplatz): Starts und Zyklen machen Geräte leichter erkennbar. Exporte sind dann mit 5 oder 15 Minuten möglich."
+        }
+      },
+      "selection": {
+        "title": "Auswahl",
+        "description": "Die Geräte sind vom nützlichsten zum am wenigsten nützlichen für die Analyse geordnet: große und steuerbare Verbraucher (Auto, Wärmepumpe, Warmwasser), dann Kochen und Waschen, dann Grundlast (Kühlung, IT, Beleuchtung, Lüftung, Pumpen). Die empfohlenen sind angehakt; Sie entscheiden frei.",
+        "data": {
+          "appareils": "Geräte"
+        }
+      },
+      "categories": {
+        "title": "Kategorien",
+        "description": "Wählen Sie die Kategorie jedes Geräts (vorgeschlagen anhand seines Namens, seines Home-Assistant-Geräts und seiner typischen Leistung)."
+      },
+      "envoi": {
+        "title": "An analyse.sbg-energy.com senden",
+        "description": "**Standardmäßig aus.** Wenn aktiviert, sendet die Integration DENSELBEN Inhalt wie der manuelle Export (Netz, Solar, Batterie, Hausverbrauch und nur die von Ihnen gewählten Geräte, unter einem neutralen Namen, im gewählten Schritt) an analyse.sbg-energy.com, mit Ihrer Postleitzahl, höchstens einmal im Monat (ab dem 2.), nur die Tage, die der Dienst noch nicht hat. Dies ist die einzige ausgehende Netzwerkverbindung der Integration. Zweck: der Bericht in Ihrem SBG-Energy-Konto, bei jedem Senden aktualisiert, und die E-Mail-Benachrichtigung „besseres Angebot“; und nur wenn Sie „SBG-Werkzeuge verbessern“ ankreuzen, Statistiken nach Postleitzahl und eine pseudonymisierte Kopie. 5-Minuten-Schritt 12 Monate aufbewahrt, dann zu Viertelstunden zusammengefasst, alles nach 3 gleitenden Jahren gelöscht; höchstens 3 Installationen pro Konto; aus Ihrem Konto löschbar; kostenlos während der Beta. Bedingungen: https://analyse.sbg-energy.com/conditions/#home-assistant\n\nSBG-Energy-Konto: {compte}.",
+        "data": {
+          "envoi_actif": "An analyse.sbg-energy.com senden",
+          "code_postal": "Postleitzahl",
+          "ameliorer_outils": "SBG-Werkzeuge verbessern",
+          "pas_envoi": "Gesendeter Schritt (Minuten)",
+          "deconnecter": "Mein SBG-Energy-Konto trennen"
+        },
+        "data_description": {
+          "envoi_actif": "Das Ankreuzen startet die Verbindung mit Ihrem SBG-Energy-Konto: ein Code, den Sie auf auth.sbg-energy.com eingeben. In Home Assistant wird kein Passwort gespeichert.",
+          "code_postal": "Zum Senden erforderlich (Home Assistant kennt sie nicht). Dient den Netztarifen, der Region und dem Wetter der Zone, nie einer Adresse. Auch in Ihrem Konto änderbar.",
+          "ameliorer_outils": "Optional, standardmäßig nicht angekreuzt. „Ich bin einverstanden, dass SBG meine Verbrauchsdaten pseudonymisiert aufbewahrt, um seine Werkzeuge zu verbessern (Simulator, SBG Home). Ich kann diese Einwilligung jederzeit widerrufen.“ Nur wenn angekreuzt: Jeder empfangene Monat dient 90 Tage später für Statistiken nach Postleitzahl (Monatssummen ohne Namen, veröffentlicht ab 10 Haushalten) und für eine pseudonymisierte Kopie. Das Abwählen löscht die Kopien; bereits gelieferte, anonyme Summen können nicht mehr zurückverfolgt werden.",
+          "pas_envoi": "5 nur mit der Option „feinster Schritt: 5 Minuten“.",
+          "deconnecter": "Vergisst die Verbindung hier und widerruft sie bei SBG Energy; es wird nichts mehr gesendet."
+        }
+      },
+      "connexion": {
+        "title": "Ihr SBG-Energy-Konto verbinden",
+        "description": "Öffnen Sie {url} und geben Sie den Code **{code}** ein, melden Sie sich dann bei Ihrem SBG-Energy-Konto an (mit Ihrem 6-stelligen Code) und stimmen Sie zu. Dieser Bildschirm schließt sich von selbst (höchstens 10 Minuten)."
+      }
+    },
+    "progress": {
+      "connexion": "Öffnen Sie {url} und geben Sie den Code **{code}** ein. Warten auf Ihre Zustimmung…"
+    },
+    "abort": {
+      "auth_injoignable": "auth.sbg-energy.com ist nicht erreichbar: Es wurde nichts aktiviert. Versuchen Sie es später erneut.",
+      "connexion_echouee": "Verbindung nicht abgeschlossen: {message} Es wurde nichts aktiviert.",
+      "reglages_refuses": "Senden nicht aktiviert: {message} Das Token wurde vergessen und widerrufen."
+    },
+    "error": {
+      "pas_5_sans_option": "Der 5-Minuten-Schritt erfordert die Option „feinster Schritt: 5 Minuten“.",
+      "code_postal": "Zum Senden ist eine belgische Postleitzahl mit 4 Ziffern erforderlich.",
+      "reglages_refuses": "Der Dienst hat abgelehnt: {message}"
+    }
+  },
+  "selector": {
+    "choix": {
+      "options": {
+        "tous": "Alle",
+        "aucun": "Keine",
+        "selection": "Eine Auswahl"
+      }
+    },
+    "categorie": {
+      "options": {
+        "voiture": "Auto / Ladestation",
+        "pac": "Wärmepumpe / Heizung",
+        "ballon": "Warmwasser",
+        "cuisson": "Kochen (Backofen, Kochfeld)",
+        "lavage": "Waschen (Waschmaschine, Trockner, Spülmaschine)",
+        "froid": "Kühlung (Kühlschrank, Gefrierschrank)",
+        "informatique": "IT und Netzwerk",
+        "eclairage": "Beleuchtung",
+        "ventilation": "Lüftung (KWL, Abluft)",
+        "pompe": "Pumpen und Wasser (Zisterne, Pool, UV, Enthärter)",
+        "autre": "Sonstiges"
+      }
+    },
+    "pas_envoi": {
+      "options": {
+        "5": "5 Minuten",
+        "15": "15 Minuten",
+        "60": "Stündlich"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "exporter_5": {
+        "name": "Exportieren (5 min)"
+      },
+      "exporter_15": {
+        "name": "Exportieren (15 min)"
+      },
+      "exporter_60": {
+        "name": "Exportieren (stündlich)"
+      },
+      "envoyer": {
+        "name": "Jetzt senden"
+      }
+    },
+    "sensor": {
+      "dernier_quart": {
+        "name": "Letzte aufgezeichnete Viertelstunde",
+        "state_attributes": {
+          "premier_quart": {
+            "name": "Erste Viertelstunde"
+          }
+        }
+      },
+      "dernier_envoi": {
+        "name": "Letztes Senden",
+        "state_attributes": {
+          "prochain_envoi": {
+            "name": "Nächstes Senden erlaubt"
+          },
+          "jours_envoyes": {
+            "name": "Gesendete Tage"
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "exporter": {
+      "name": "Exportieren",
+      "description": "Schreibt die Datei „SBG HA export“ (Vergangenheit stündlich, Viertelstunden oder 5-Minuten-Zeiträume, wo aufgezeichnet) und meldet einen lokalen Download-Link. Es wird nichts gesendet.",
+      "fields": {
+        "pas": {
+          "name": "Schritt (Minuten)",
+          "description": "5 (nur mit der Option „feinster Schritt: 5 Minuten“), 15 oder 60."
+        },
+        "debut": {
+          "name": "Beginn",
+          "description": "Erster Tag (UTC). Standard: Beginn der Statistiken."
+        },
+        "fin": {
+          "name": "Ende",
+          "description": "Endtag, ausgeschlossen (UTC). Standard: aktuelle Stunde."
+        }
+      }
+    },
+    "envoyer": {
+      "name": "Jetzt senden",
+      "description": "Sendet die fehlenden Tage an analyse.sbg-energy.com (nur wenn das Senden aktiviert und Ihr Konto verbunden ist). Der Dienst akzeptiert ein Senden pro Monat."
+    },
+    "reimporter": {
+      "name": "Einen Zeitraum erneut importieren",
+      "description": "Sendet die gewählten Tage erneut und ERSETZT sie bei analyse.sbg-energy.com (höchstens 3-mal pro Monat).",
+      "fields": {
+        "debut": {
+          "name": "Beginn",
+          "description": "Erster Tag (UTC)."
+        },
+        "fin": {
+          "name": "Ende",
+          "description": "Endtag, ausgeschlossen (UTC)."
+        }
+      }
+    }
+  }
+}

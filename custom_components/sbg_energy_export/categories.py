@@ -106,6 +106,32 @@ RAISONS: dict[str, dict[str, str]] = {
         "pompe": "optional: pumps and water treatment, often running all the time",
         "autre": "optional",
     },
+    "nl": {
+        "voiture": "aanbevolen: scheidt het laden van de auto van de rest van de woning",
+        "pac": "aanbevolen: scheidt de verwarming, een grote en stuurbare verbruiker",
+        "ballon": "aanbevolen: warm water kan de zon of de daluren volgen",
+        "cuisson": "nuttig: maaltijden en vermogenspieken",
+        "lavage": "nuttig: toestellen die men kan verschuiven",
+        "froid": "optioneel: draait voortdurend (basisverbruik)",
+        "informatique": "optioneel: netwerk en stand-by (basisverbruik)",
+        "eclairage": "optioneel: klein deel van het verbruik",
+        "ventilation": "optioneel: draait voortdurend (basisverbruik)",
+        "pompe": "optioneel: pompen en waterbehandeling, vaak voortdurend",
+        "autre": "optioneel",
+    },
+    "de": {
+        "voiture": "empfohlen: trennt das Laden des Autos vom Rest des Hauses",
+        "pac": "empfohlen: trennt die Heizung, ein großer und steuerbarer Verbraucher",
+        "ballon": "empfohlen: Warmwasser kann der Sonne oder dem Niedertarif folgen",
+        "cuisson": "nützlich: Mahlzeiten und Leistungsspitzen",
+        "lavage": "nützlich: Geräte, die sich verschieben lassen",
+        "froid": "optional: läuft ständig (Grundlast)",
+        "informatique": "optional: Netzwerk und Standby (Grundlast)",
+        "eclairage": "optional: kleiner Teil des Verbrauchs",
+        "ventilation": "optional: läuft ständig (Grundlast)",
+        "pompe": "optional: Pumpen und Wasseraufbereitung, oft im Dauerbetrieb",
+        "autre": "optional",
+    },
 }
 LIBELLES: dict[str, dict[str, str]] = {
     "fr": {"voiture": "Voiture / borne", "pac": "PAC / chauffage", "ballon": "Eau chaude", "cuisson": "Cuisson",
@@ -114,6 +140,12 @@ LIBELLES: dict[str, dict[str, str]] = {
     "en": {"voiture": "Car / charger", "pac": "Heat pump / heating", "ballon": "Hot water", "cuisson": "Cooking",
            "lavage": "Washing", "froid": "Cold", "informatique": "IT and network", "eclairage": "Lighting",
            "ventilation": "Ventilation", "pompe": "Pumps and water", "autre": "Other"},
+    "nl": {"voiture": "Auto / laadpaal", "pac": "Warmtepomp / verwarming", "ballon": "Warm water", "cuisson": "Koken",
+           "lavage": "Wassen", "froid": "Koeling", "informatique": "IT en netwerk", "eclairage": "Verlichting",
+           "ventilation": "Ventilatie", "pompe": "Pompen en water", "autre": "Overige"},
+    "de": {"voiture": "Auto / Ladestation", "pac": "Wärmepumpe / Heizung", "ballon": "Warmwasser", "cuisson": "Kochen",
+           "lavage": "Waschen", "froid": "Kühlung", "informatique": "IT und Netzwerk", "eclairage": "Beleuchtung",
+           "ventilation": "Lüftung", "pompe": "Pumpen und Wasser", "autre": "Sonstiges"},
 }
 
 
@@ -158,8 +190,9 @@ def deviner_categorie(nom: str, *autres: str | None, kwh_h_max: float | None = N
 
 
 def langue(code: str | None) -> str:
-    """``fr`` ou ``en`` (les autres langues reçoivent l'anglais)."""
-    return "fr" if (code or "").lower().startswith("fr") else "en"
+    """``fr``, ``nl``, ``de`` ou ``en`` (les autres langues reçoivent l'anglais)."""
+    prefixe = (code or "").lower()[:2]
+    return prefixe if prefixe in RAISONS else "en"
 
 
 def libelle(nom: str, categorie: str, code_langue: str | None) -> str:

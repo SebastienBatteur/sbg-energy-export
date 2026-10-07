@@ -21,7 +21,9 @@ sur un service d'analyse comme analyse.sbg-energy.com.
   L'intégration reprend ces ~10 jours à l'installation, puis enregistre chaque quart d'heure (ou,
   en option, chaque période de 5 minutes) au fil de l'eau.
 
-> Statut : **version 0.5.0, pas encore publiée**. Nom, licence et publication à décider.
+> Statut : **version 0.5.0, bêta**. Licence Apache-2.0. Interface en français, anglais, néerlandais
+> et allemand. Problèmes et idées : [issues](https://github.com/SebastienBatteur/sbg-energy-export/issues) ;
+> faille de sécurité : voir [SECURITY.md](SECURITY.md). Historique des versions : [CHANGELOG.md](CHANGELOG.md).
 
 ## Ce que contient l'export
 
@@ -40,7 +42,7 @@ pas fin. Une cellule vide veut dire « inconnu », jamais zéro.
 Il faut Home Assistant **2026.9** ou plus récent (testé avec 2026.10.0b0) et le **tableau
 Énergie configuré** (au moins le réseau, ou le solaire, ou une batterie).
 
-**Par HACS (dépôt personnalisé)** : HACS → ⋮ → *Dépôts personnalisés* → l'adresse de ce dépôt,
+**Par HACS (dépôt personnalisé)** : HACS → ⋮ → *Dépôts personnalisés* → `https://github.com/SebastienBatteur/sbg-energy-export`,
 catégorie *Intégration* → installer *SBG Energy Export* → redémarrer Home Assistant.
 
 **À la main** : copier le dossier `custom_components/sbg_energy_export` dans le dossier
@@ -215,6 +217,37 @@ Voir [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) :
   pytest
   ```
 
+## Confidentialité et RGPD
+
+- **Par défaut, rien ne quitte votre Home Assistant** : l'export est un fichier que vous
+  téléchargez et déposez vous-même où vous voulez. L'intégration ne fait aucun appel réseau sortant
+  tant que l'envoi direct n'est pas activé **et** votre compte connecté.
+- **Ce qui part avec l'envoi direct** : uniquement le contenu de l'export (énergie par période du
+  réseau, du solaire, de la batterie, de la maison et des appareils choisis sous un nom neutre),
+  votre code postal, la case « Améliorer les outils SBG » un identifiant aléatoire de
+  l'installation et la version de l'intégration (en-tête `User-Agent`). Jamais de nom d'entité, de nom d'appareil, de pièce, d'adresse ni de position.
+- **Responsable du traitement, finalités, durées de conservation, droits (accès, rectification,
+  effacement, retrait du consentement) et contact** : voir les conditions du service,
+  <https://analyse.sbg-energy.com/conditions/#home-assistant>. Vous pouvez effacer vos données et
+  déconnecter Home Assistant depuis votre compte SBG Energy.
+- **Chez vous** : les fichiers listés ci-dessus restent dans votre dossier de configuration ; ils
+  font partie de vos sauvegardes Home Assistant.
+
+## Désinstallation
+
+1. **Paramètres → Appareils et services → SBG Energy Export → ⋮ → Supprimer**. Si l'envoi direct
+   était connecté, l'intégration retire son autorisation chez SBG Energy (au mieux : sans réseau,
+   le jeton est seulement oublié et expire après 30 jours sans usage ; vous pouvez aussi
+   déconnecter Home Assistant depuis votre compte).
+2. **HACS → SBG Energy Export → ⋮ → Supprimer** (ou effacer le dossier
+   `custom_components/sbg_energy_export` si installé à la main), puis redémarrer Home Assistant.
+3. **Données locales** : elles ne sont pas effacées automatiquement (ce sont vos données). Pour
+   tout enlever, supprimer le dossier `<config>/sbg_energy_export/` et les fichiers
+   `.storage/sbg_energy_export.collecteur` et `.storage/sbg_energy_export.envoi`
+   (Home Assistant arrêté).
+4. **Données envoyées** (envoi direct seulement) : à effacer depuis votre compte SBG Energy.
+
 ## Licence
 
-[Apache-2.0](LICENSE) (voir aussi [NOTICE](NOTICE)).
+[Apache-2.0](LICENSE) (voir aussi [NOTICE](NOTICE)). Le nom et le logo SBG Energy ne sont pas couverts
+par la licence (section 6) : ils servent à identifier l'origine du projet.

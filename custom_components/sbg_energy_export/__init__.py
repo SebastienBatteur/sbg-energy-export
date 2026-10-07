@@ -37,6 +37,7 @@ from .const import (
     ATTR_DEBUT,
     ATTR_FIN,
     ATTR_PAS,
+    DATA_JETON,
     DATA_SOURCE,
     DOMAIN,
     DOSSIER,
@@ -195,3 +196,15 @@ async def _async_options_modifiees(hass: HomeAssistant, entree: SbgConfigEntry) 
 async def async_unload_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> bool:
     """Arrête l'enregistrement (les fichiers restent)."""
     return await hass.config_entries.async_unload_platforms(entree, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> None:
+    """Suppression de l'intégration : le jeton est retiré chez SBG Energy (au mieux).
+
+    Home Assistant efface l'entrée (et donc le jeton) de toute façon ; la révocation évite
+    qu'une autorisation reste valable dans le compte SBG Energy. Les fichiers locaux
+    (``<config>/sbg_energy_export/``) restent : ce sont les données de l'utilisateur, le
+    README dit comment les supprimer.
+    """
+    if jeton := entree.data.get(DATA_JETON):
+        await envoi.async_revoquer(hass, jeton)

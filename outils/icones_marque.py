@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Images de marque de l'intégration à partir du logo officiel SBG Energy (SVG du site
-sbg-energy.com, ``simulations/static/simulations/img/sbg-logo.svg`` du dépôt pvapp).
+sbg-energy.com, fichier ``sbg-logo.svg``, recopié ci-dessous).
 
     python outils/icones_marque.py
 
@@ -12,7 +12,7 @@ Produit, en PNG à fond transparent, recadrés au plus près (marge de 2 %) :
   seul : pas de texte), et les variantes ``dark_*`` pour le thème sombre (symbole clair :
   le noir officiel disparaîtrait sur fond sombre) ;
 * ``docs/brands/custom_integrations/sbg_energy_export/`` : les mêmes images, prêtes pour
-  une demande au dépôt ``home-assistant/brands`` (PAS soumise : décision de Sébastien),
+  une demande au dépôt ``home-assistant/brands`` (pas encore soumise),
   utile tant que HACS n'affiche pas les images locales ;
 * ``docs/icone/icon.svg``, ``icon.png``, ``icon@2x.png`` : les mêmes, pour le README.
 

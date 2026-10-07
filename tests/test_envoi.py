@@ -363,6 +363,13 @@ async def test_deconnexion_depuis_les_options(hass: HomeAssistant, connecte, ser
     assert connecte.options["envoi_actif"] is False
 
 
+async def test_suppression_de_l_integration_retire_le_jeton(hass: HomeAssistant, connecte, serveur: Serveur) -> None:
+    with patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min):
+        assert await hass.config_entries.async_remove(connecte.entry_id)
+        await hass.async_block_till_done()
+    assert serveur.revocations == 1
+
+
 async def test_pas_de_5_minutes_sans_option(hass: HomeAssistant, connecte) -> None:
     r = await _options_jusqu_a_envoi(hass, connecte)
     with pytest.raises(Exception):  # noqa: B017 - « 5 » n'est même pas proposé sans l'option

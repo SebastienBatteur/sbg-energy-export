@@ -212,7 +212,7 @@ exactement comme `heure_repartie` en version 1.
 ## 4. Ce que vérifie le lecteur
 
 Un fichier qui ne respecte pas la structure (§ 3.1, 3.2, provenances, nombres) est **refusé**.
-Sinon, contrôles (bibliothèque commune `verifications.py`, ADR-035) :
+Sinon, contrôles du lecteur de analyse.sbg-energy.com :
 
 1. pas régulier, sans doublon ni trou de lignes ; instants alignés sur le pas (version 2 : chaque
    ligne suit la précédente de la durée de celle-ci, lignes horaires alignées sur l'heure) ;

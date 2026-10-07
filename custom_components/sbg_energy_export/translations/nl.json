@@ -1,0 +1,203 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Te exporteren apparaten",
+        "description": "Uw Energie-dashboard volgt {nombre} apparaat/apparaten. Welke moet het bestand bevatten? Hun namen worden nooit geëxporteerd: alleen een categorie (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Apparaten",
+          "conservation_ans": "Lokale gegevens bewaren (jaren)",
+          "pas_5min": "Fijnste stap: 5 minuten"
+        },
+        "data_description": {
+          "conservation_ans": "Opnames met fijne resolutie blijven in Home Assistant (afgesloten maanden gecomprimeerd). Oudere maanden worden verwijderd.",
+          "pas_5min": "Standaard uit. Bewaart periodes van 5 minuten in plaats van kwartieren (ongeveer 2,5 keer meer opslag): opstarten en cycli maken apparaten makkelijker herkenbaar. Exporteren kan dan per 5 of 15 minuten."
+        }
+      },
+      "selection": {
+        "title": "Selectie",
+        "description": "De apparaten staan van het meest naar het minst nuttig voor de analyse: grote en stuurbare verbruikers (auto, warmtepomp, warm water), dan koken en wassen, dan basisverbruik (koeling, IT, verlichting, ventilatie, pompen). De aanbevolen apparaten zijn aangevinkt; u kiest zelf.",
+        "data": {
+          "appareils": "Apparaten"
+        }
+      },
+      "categories": {
+        "title": "Categorieën",
+        "description": "Kies de categorie van elk apparaat (voorgesteld op basis van de naam, het Home Assistant-apparaat en het typische vermogen)."
+      }
+    },
+    "abort": {
+      "tableau_energie_vide": "Stel eerst het Energie-dashboard in (net, zonnepanelen of batterij).",
+      "single_instance_allowed": "Al geconfigureerd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Te exporteren apparaten",
+        "description": "Uw Energie-dashboard volgt {nombre} apparaat/apparaten. Welke moet het bestand bevatten? Hun namen worden nooit geëxporteerd: alleen een categorie (voiture_1, pac_1...).",
+        "data": {
+          "choix": "Apparaten",
+          "conservation_ans": "Lokale gegevens bewaren (jaren)",
+          "pas_5min": "Fijnste stap: 5 minuten"
+        },
+        "data_description": {
+          "conservation_ans": "Opnames met fijne resolutie blijven in Home Assistant (afgesloten maanden gecomprimeerd). Oudere maanden worden verwijderd.",
+          "pas_5min": "Standaard uit. Bewaart periodes van 5 minuten in plaats van kwartieren (ongeveer 2,5 keer meer opslag): opstarten en cycli maken apparaten makkelijker herkenbaar. Exporteren kan dan per 5 of 15 minuten."
+        }
+      },
+      "selection": {
+        "title": "Selectie",
+        "description": "De apparaten staan van het meest naar het minst nuttig voor de analyse: grote en stuurbare verbruikers (auto, warmtepomp, warm water), dan koken en wassen, dan basisverbruik (koeling, IT, verlichting, ventilatie, pompen). De aanbevolen apparaten zijn aangevinkt; u kiest zelf.",
+        "data": {
+          "appareils": "Apparaten"
+        }
+      },
+      "categories": {
+        "title": "Categorieën",
+        "description": "Kies de categorie van elk apparaat (voorgesteld op basis van de naam, het Home Assistant-apparaat en het typische vermogen)."
+      },
+      "envoi": {
+        "title": "Verzenden naar analyse.sbg-energy.com",
+        "description": "**Standaard uit.** Indien ingeschakeld verstuurt de integratie DEZELFDE inhoud als de handmatige export (net, zonnepanelen, batterij, verbruik van de woning en alleen de apparaten die u koos, onder een neutrale naam, met de gekozen stap) naar analyse.sbg-energy.com, met uw postcode, hoogstens één keer per maand (vanaf de 2e), alleen de dagen die de dienst nog niet heeft. Dit is de enige uitgaande netwerkverbinding van de integratie. Doel: het rapport in uw SBG Energy-account, bij elke verzending bijgewerkt, en de e-mailmelding \"beter aanbod\"; en alleen als u \"SBG-tools verbeteren\" aanvinkt, statistieken per postcode en een gepseudonimiseerde kopie. Stap van 5 minuten 12 maanden bewaard en daarna samengevoegd tot kwartieren, alles verwijderd na 3 glijdende jaren; hoogstens 3 installaties per account; te wissen vanuit uw account; gratis tijdens de bèta. Voorwaarden: https://analyse.sbg-energy.com/conditions/#home-assistant\n\nSBG Energy-account: {compte}.",
+        "data": {
+          "envoi_actif": "Verzenden naar analyse.sbg-energy.com",
+          "code_postal": "Postcode",
+          "ameliorer_outils": "SBG-tools verbeteren",
+          "pas_envoi": "Verzonden stap (minuten)",
+          "deconnecter": "Mijn SBG Energy-account loskoppelen"
+        },
+        "data_description": {
+          "envoi_actif": "Aanvinken start de koppeling met uw SBG Energy-account: een code om in te voeren op auth.sbg-energy.com. Er wordt geen wachtwoord opgeslagen in Home Assistant.",
+          "code_postal": "Verplicht om te verzenden (Home Assistant kent hem niet). Gebruikt voor de nettarieven, de regio en het weer in de zone, nooit voor een adres. Ook te wijzigen in uw account.",
+          "ameliorer_outils": "Optioneel, standaard niet aangevinkt. \"Ik ga ermee akkoord dat SBG mijn verbruiksgegevens, gepseudonimiseerd, bewaart om zijn tools te verbeteren (simulator, SBG Home). Ik kan deze toestemming op elk moment intrekken.\" Alleen indien aangevinkt: elke ontvangen maand wordt 90 dagen later gebruikt voor statistieken per postcode (maandtotalen zonder naam, gepubliceerd vanaf 10 gezinnen) en een gepseudonimiseerde kopie. Uitvinken wist de kopieën; reeds afgegeven totalen, anoniem, zijn niet meer terug te vinden.",
+          "pas_envoi": "5 alleen met de optie \"fijnste stap: 5 minuten\".",
+          "deconnecter": "Vergeet de koppeling hier en trekt ze in bij SBG Energy; er wordt niets meer verzonden."
+        }
+      },
+      "connexion": {
+        "title": "Uw SBG Energy-account koppelen",
+        "description": "Open {url} en voer de code **{code}** in, meld u dan aan bij uw SBG Energy-account (met uw code van 6 cijfers) en keur goed. Dit scherm sluit vanzelf (hoogstens 10 minuten)."
+      }
+    },
+    "progress": {
+      "connexion": "Open {url} en voer de code **{code}** in. Wachten op uw goedkeuring…"
+    },
+    "abort": {
+      "auth_injoignable": "auth.sbg-energy.com is niet bereikbaar: er werd niets ingeschakeld. Probeer het later opnieuw.",
+      "connexion_echouee": "Koppeling niet voltooid: {message} Er werd niets ingeschakeld.",
+      "reglages_refuses": "Verzenden niet ingeschakeld: {message} Het token werd vergeten en ingetrokken."
+    },
+    "error": {
+      "pas_5_sans_option": "De stap van 5 minuten vereist de optie \"fijnste stap: 5 minuten\".",
+      "code_postal": "Een Belgische postcode van 4 cijfers is verplicht om te verzenden.",
+      "reglages_refuses": "De dienst weigerde: {message}"
+    }
+  },
+  "selector": {
+    "choix": {
+      "options": {
+        "tous": "Alle",
+        "aucun": "Geen",
+        "selection": "Een selectie"
+      }
+    },
+    "categorie": {
+      "options": {
+        "voiture": "Auto / laadpaal",
+        "pac": "Warmtepomp / verwarming",
+        "ballon": "Warm water",
+        "cuisson": "Koken (oven, kookplaat)",
+        "lavage": "Wassen (wasmachine, droger, vaatwasser)",
+        "froid": "Koeling (koelkast, diepvriezer)",
+        "informatique": "IT en netwerk",
+        "eclairage": "Verlichting",
+        "ventilation": "Ventilatie (WTW, afzuiging)",
+        "pompe": "Pompen en water (regenput, zwembad, UV, ontharder)",
+        "autre": "Overige"
+      }
+    },
+    "pas_envoi": {
+      "options": {
+        "5": "5 minuten",
+        "15": "15 minuten",
+        "60": "Per uur"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "exporter_5": {
+        "name": "Exporteren (5 min)"
+      },
+      "exporter_15": {
+        "name": "Exporteren (15 min)"
+      },
+      "exporter_60": {
+        "name": "Exporteren (per uur)"
+      },
+      "envoyer": {
+        "name": "Nu verzenden"
+      }
+    },
+    "sensor": {
+      "dernier_quart": {
+        "name": "Laatst opgenomen kwartier",
+        "state_attributes": {
+          "premier_quart": {
+            "name": "Eerste kwartier"
+          }
+        }
+      },
+      "dernier_envoi": {
+        "name": "Laatste verzending",
+        "state_attributes": {
+          "prochain_envoi": {
+            "name": "Volgende verzending toegestaan"
+          },
+          "jours_envoyes": {
+            "name": "Verzonden dagen"
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "exporter": {
+      "name": "Exporteren",
+      "description": "Schrijft het bestand \"SBG HA export\" (verleden per uur, kwartieren of periodes van 5 minuten waar opgenomen) en meldt een lokale downloadlink. Er wordt niets verzonden.",
+      "fields": {
+        "pas": {
+          "name": "Stap (minuten)",
+          "description": "5 (alleen met de optie \"fijnste stap: 5 minuten\"), 15 of 60."
+        },
+        "debut": {
+          "name": "Begin",
+          "description": "Eerste dag (UTC). Standaard: begin van de statistieken."
+        },
+        "fin": {
+          "name": "Einde",
+          "description": "Einddag, niet inbegrepen (UTC). Standaard: huidig uur."
+        }
+      }
+    },
+    "envoyer": {
+      "name": "Nu verzenden",
+      "description": "Verzendt de ontbrekende dagen naar analyse.sbg-energy.com (alleen als verzenden is ingeschakeld en uw account gekoppeld). De dienst aanvaardt één verzending per maand."
+    },
+    "reimporter": {
+      "name": "Een periode opnieuw importeren",
+      "description": "Verzendt de gekozen dagen opnieuw en VERVANGT ze bij analyse.sbg-energy.com (hoogstens 3 keer per maand).",
+      "fields": {
+        "debut": {
+          "name": "Begin",
+          "description": "Eerste dag (UTC)."
+        },
+        "fin": {
+          "name": "Einde",
+          "description": "Einddag, niet inbegrepen (UTC)."
+        }
+      }
+    }
+  }
+}
