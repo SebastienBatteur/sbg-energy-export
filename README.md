@@ -1,6 +1,6 @@
 # SBG Energy Export (Home Assistant)
 
-<img src="docs/icone/icon.png" alt="Logo SBG Energy" width="96" height="96">
+<img src="https://raw.githubusercontent.com/SebastienBatteur/sbg-energy-export/main/docs/icone/icon.png" alt="Logo SBG Energy" width="96" height="96">
 
 *[English version](README.en.md)*
 
