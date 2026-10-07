@@ -25,7 +25,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import asy
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker, AiohttpClientMockResponse
 
 from custom_components.sbg_energy_export import envoi
-from custom_components.sbg_energy_export.const import API_URL, AUTH_URL, DATA_JETON, DATA_SOURCE, DOMAIN
+from custom_components.sbg_energy_export.const import API_URL, AUTH_URL, DATA_JETON, DATA_SOURCE, DOMAIN, URL_CONDITIONS
 
 from .test_init import PAR_HEURE, PREFS, faux_5min
 
@@ -368,6 +368,13 @@ async def test_suppression_de_l_integration_retire_le_jeton(hass: HomeAssistant,
         assert await hass.config_entries.async_remove(connecte.entry_id)
         await hass.async_block_till_done()
     assert serveur.revocations == 1
+
+
+async def test_ecran_envoi_donne_le_lien_des_conditions(hass: HomeAssistant, connecte) -> None:
+    """Le lien des conditions vient d'un paramètre (hassfest refuse les URL dans les traductions)."""
+    r = await _options_jusqu_a_envoi(hass, connecte)
+    assert r["description_placeholders"]["conditions"] == URL_CONDITIONS
+    assert URL_CONDITIONS == "https://analyse.sbg-energy.com/conditions/#home-assistant"
 
 
 async def test_pas_de_5_minutes_sans_option(hass: HomeAssistant, connecte) -> None:

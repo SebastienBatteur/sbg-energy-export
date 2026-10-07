@@ -58,3 +58,20 @@ def test_phrases_du_selecteur_dans_les_quatre_langues() -> None:
     assert categories.langue("it") == "en"
     assert categories.langue(None) == "en"
     assert "laadpaal" in categories.libelle("Borne", "voiture", "nl")
+
+
+# Même règle que hassfest (script/hassfest/translations.py) : pas d'URL dans les chaînes.
+RE_URL = re.compile(r"(((ftp|ftps|scp|http|https|mqtt|mqtts|socket|socks5):\/\/|www\.)[^\s/$.?#].[^\s]*)")
+
+
+@pytest.mark.parametrize("fichier", ["strings.json", *(f"translations/{lg}.json" for lg in LANGUES)])
+def test_aucune_url_dans_les_chaines(fichier: str) -> None:
+    def chaines(d: dict, prefixe: str = ""):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                yield from chaines(v, f"{prefixe}{k}.")
+            else:
+                yield prefixe + k, v
+
+    trouvees = [cle for cle, v in chaines(_lire(DOSSIER / fichier)) if RE_URL.search(v)]
+    assert trouvees == [], trouvees

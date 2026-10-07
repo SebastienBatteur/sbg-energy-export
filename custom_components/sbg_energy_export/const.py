@@ -52,6 +52,9 @@ DATA_JETON: Final = "jeton_rafraichissement"   # jeton de rafraîchissement (jam
 DATA_SOURCE: Final = "source"                   # identifiant ALÉATOIRE de cette installation
 AUTH_URL: Final = "https://auth.sbg-energy.com/realms/sbg"
 API_URL: Final = "https://analyse.sbg-energy.com/api/v1/ha"
+# Conditions du service, données à l'écran « Envoi » par un paramètre (hassfest refuse les URL
+# dans les traductions).
+URL_CONDITIONS: Final = "https://analyse.sbg-energy.com/conditions/#home-assistant"
 CLIENT_ID: Final = "sbg-ha-export"
 PORTEES: Final = "offline_access ha-export"
 SERVICE_ENVOYER: Final = "envoyer"

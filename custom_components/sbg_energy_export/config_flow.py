@@ -66,6 +66,7 @@ from .const import (
     OPT_ENVOI,
     OPT_PAS_ENVOI,
     PAS_ENVOI_DEFAUT,
+    URL_CONDITIONS,
 )
 from .sbg_format import CATEGORIES, appareils_du_tableau, variations
 
@@ -338,7 +339,8 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
             schema[vol.Required(OPT_DECONNECTER, default=False)] = BooleanSelector()
         return self.async_show_form(step_id="envoi", data_schema=vol.Schema(schema), errors=erreurs,
                                     description_placeholders={"compte": "connecté" if connecte else "non connecté",
-                                                              "message": message})
+                                                              "message": message,
+                                                              "conditions": URL_CONDITIONS})
 
     async def async_step_connexion(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Code à saisir sur auth.sbg-energy.com ; attend la validation (10 minutes au plus)."""
