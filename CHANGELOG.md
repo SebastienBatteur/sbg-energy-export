@@ -3,13 +3,16 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; versions : [SemVer](https://semver.org/lang/fr/).
 Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_SBG_HA_EXPORT.md`).
 
-## [Non publié]
+## [0.5.1] — logo visible dans HACS
+
+- README (fr, en) : le logo est donné par une adresse absolue ; HACS n'affichait que le texte
+  « Logo SBG Energy », faute de pouvoir charger une image à chemin relatif.
+
+## [0.5.0] — première version publique
 
 - Étape **Envoi** (fr, en, nl, de) : une phrase informe que les données de consommation peuvent refléter
   l'activité des personnes vivant dans le logement, et invite à les informer si le logement est partagé.
   Même phrase que sur le site et le service d'analyse. Sans URL (règle de hassfest).
-
-## [0.5.0] — première version publique
 
 - Lien **Télécharger** de la notification ouvert dans un nouvel onglet : il télécharge
   vraiment le fichier (le frontend l'interceptait comme une navigation interne).
