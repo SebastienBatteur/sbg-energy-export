@@ -59,18 +59,22 @@
       },
       "envoi": {
         "title": "Verzenden naar analyse.sbg-energy.com",
-        "description": "**Standaard uit.** Indien ingeschakeld verstuurt de integratie DEZELFDE inhoud als de handmatige export (net, zonnepanelen, batterij, verbruik van de woning en alleen de apparaten die u koos, onder een neutrale naam, met de gekozen stap) naar analyse.sbg-energy.com, met uw postcode, hoogstens één keer per maand (vanaf de 2e), alleen de dagen die de dienst nog niet heeft. Dit is de enige uitgaande netwerkverbinding van de integratie. Doel: het rapport in uw SBG Energy-account, bij elke verzending bijgewerkt, en de e-mailmelding \"beter aanbod\"; en alleen als u \"SBG-tools verbeteren\" aanvinkt, statistieken per postcode en een gepseudonimiseerde kopie. Stap van 5 minuten 12 maanden bewaard en daarna samengevoegd tot kwartieren, alles verwijderd na 3 glijdende jaren; hoogstens 3 installaties per account; te wissen vanuit uw account; gratis tijdens de bèta. Voorwaarden: {conditions}\n\nVerbruiksgegevens kunnen de activiteit weerspiegelen van de mensen die in de woning wonen. Deelt u deze woning, informeer hen dan over het gebruik van deze dienst.\n\nSBG Energy-account: {compte}.",
+        "description": "**Standaard uit.** Indien ingeschakeld verstuurt de integratie DEZELFDE inhoud als de handmatige export (net, zonnepanelen, batterij, verbruik van de woning en alleen de apparaten die u koos, onder een neutrale naam, met de gekozen stap) naar analyse.sbg-energy.com, met uw postcode, hoogstens één keer per maand (vanaf de 2e), alleen de dagen die de dienst nog niet heeft. Dit is de enige uitgaande netwerkverbinding van de integratie. Deze gegevens zijn een bron van uw woning. Doel: het rapport van uw woning, bij elke verzending bijgewerkt, en de e-mailmelding \"beter aanbod\"; en alleen als u \"SBG-tools verbeteren\" aanvinkt, statistieken per postcode en een gepseudonimiseerde kopie. De stap van 5 minuten wordt 12 maanden bewaard en daarna samengevoegd tot kwartieren. Uw ruwe bestanden worden na 90 dagen verwijderd. Met een account worden de metingen van uw woning 3 jaar bewaard om uw rapport bij te houden, en daarna verwijderd. U kunt op elk moment alles verwijderen. Hoogstens drie woningen en drie Home Assistant-installaties per account, slechts één per woning; gratis tijdens de bèta. Voorwaarden: {conditions}\n\nVerbruiksgegevens kunnen de activiteit weerspiegelen van de mensen die in de woning wonen. Deelt u deze woning, informeer hen dan over het gebruik van deze dienst.\n\nSBG Energy-account: {compte}. Woning: {logement}.",
         "data": {
           "envoi_actif": "Verzenden naar analyse.sbg-energy.com",
           "code_postal": "Postcode",
+          "grd": "Netbeheerder (optioneel)",
           "ameliorer_outils": "SBG-tools verbeteren",
+          "logement": "Woning",
           "pas_envoi": "Verzonden stap (minuten)",
           "deconnecter": "Mijn SBG Energy-account loskoppelen"
         },
         "data_description": {
           "envoi_actif": "Aanvinken start de koppeling met uw SBG Energy-account: een code om in te voeren op auth.sbg-energy.com. Er wordt geen wachtwoord opgeslagen in Home Assistant.",
           "code_postal": "Verplicht om te verzenden (Home Assistant kent hem niet). Gebruikt voor de nettarieven, de regio en het weer in de zone, nooit voor een adres. Ook te wijzigen in uw account.",
+          "grd": "Het bedrijf dat uw meter beheert (staat op uw factuur). Gebruikt voor de nettarieven. \"Weet ik niet\": de dienst leidt hem af uit uw postcode als er maar één netbeheerder mogelijk is, of behoudt die van de pagina van uw woning.",
           "ameliorer_outils": "Optioneel, standaard niet aangevinkt. \"Ik ga ermee akkoord dat SBG mijn verbruiksgegevens, gepseudonimiseerd, bewaart om zijn tools te verbeteren (simulator, SBG Home). Ik kan deze toestemming op elk moment intrekken.\" Alleen indien aangevinkt: elke ontvangen maand wordt 90 dagen later gebruikt voor statistieken per postcode (maandtotalen zonder naam, gepubliceerd vanaf 10 gezinnen) en een gepseudonimiseerde kopie. Uitvinken wist de kopieën; reeds afgegeven totalen, anoniem, zijn niet meer terug te vinden.",
+          "logement": "De woning in uw SBG Energy-account die de gegevens van deze installatie ontvangt. Een andere kiezen verplaatst deze bron daarheen.",
           "pas_envoi": "5 alleen met de optie \"fijnste stap: 5 minuten\".",
           "deconnecter": "Vergeet de koppeling hier en trekt ze in bij SBG Energy; er wordt niets meer verzonden."
         }
@@ -78,6 +82,16 @@
       "connexion": {
         "title": "Uw SBG Energy-account koppelen",
         "description": "Open {url} en voer de code **{code}** in, meld u dan aan bij uw SBG Energy-account (met uw code van 6 cijfers) en keur goed. Dit scherm sluit vanzelf (hoogstens 10 minuten)."
+      },
+      "logement": {
+        "title": "Uw woning",
+        "description": "De gegevens van deze installatie komen bij de woning **{logement}** van uw SBG Energy-account: het rapport ervan houdt er rekening mee. Heeft uw account meerdere woningen, dan kunt u hieronder een andere kiezen; u kunt deze bron ook later verplaatsen, hier of vanaf de pagina van de woning.",
+        "data": {
+          "logement": "Woning"
+        },
+        "data_description": {
+          "logement": "De woning in uw SBG Energy-account die de gegevens van deze installatie ontvangt. Een andere kiezen verplaatst deze bron daarheen."
+        }
       }
     },
     "progress": {
@@ -91,7 +105,8 @@
     "error": {
       "pas_5_sans_option": "De stap van 5 minuten vereist de optie \"fijnste stap: 5 minuten\".",
       "code_postal": "Een Belgische postcode van 4 cijfers is verplicht om te verzenden.",
-      "reglages_refuses": "De dienst weigerde: {message}"
+      "reglages_refuses": "De dienst weigerde: {message}",
+      "installation_effacee": "De gegevens van deze installatie zijn verwijderd vanuit uw SBG Energy-account: het verzenden staat uit en probeert het niet meer opnieuw. Om het te hervatten: sta deze installatie eerst opnieuw toe vanuit uw account en vink daarna \"Verzenden naar analyse.sbg-energy.com\" aan."
     }
   },
   "selector": {
@@ -122,6 +137,18 @@
         "5": "5 minuten",
         "15": "15 minuten",
         "60": "Per uur"
+      }
+    },
+    "grd": {
+      "options": {
+        "inconnu": "Weet ik niet",
+        "ores": "ORES",
+        "resa": "RESA",
+        "aieg": "AIEG",
+        "aiesh": "AIESH",
+        "rew": "REW",
+        "sibelga": "Sibelga",
+        "fluvius": "Fluvius"
       }
     }
   },

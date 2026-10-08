@@ -59,18 +59,22 @@
       },
       "envoi": {
         "title": "Send to analyse.sbg-energy.com",
-        "description": "**Off by default.** When on, the integration sends the SAME content as the manual export (grid, solar, battery, house consumption and only the devices you chose, under a neutral name, at the chosen step) to analyse.sbg-energy.com, with your postcode, at most once a month (from the 2nd), only the days the service does not have yet. It is the integration's only outgoing network call. Purpose: the report in your SBG Energy account, updated at each send, and the \"better offer\" e-mail alert; and only if you tick \"Improve SBG tools\", postcode statistics and a pseudonymised copy. 5-minute step kept 12 months then grouped into quarter-hours, everything deleted after 3 rolling years; at most 3 installations per account; erasable from your account; free during the beta. Conditions: {conditions}\n\nConsumption data may reflect the activity of the people living in the home. If you share this home, consider informing them that you use this service.\n\nSBG Energy account: {compte}.",
+        "description": "**Off by default.** When on, the integration sends the SAME content as the manual export (grid, solar, battery, house consumption and only the devices you chose, under a neutral name, at the chosen step) to analyse.sbg-energy.com, with your postcode, at most once a month (from the 2nd), only the days the service does not have yet. It is the integration's only outgoing network call. These data are a source of your home. Purpose: the report of your home, updated at each send, and the \"better offer\" e-mail alert; and only if you tick \"Improve SBG tools\", postcode statistics and a pseudonymised copy. The 5-minute step is kept 12 months, then grouped into quarter-hours. Your raw files are deleted after 90 days. With an account, your home's measurements are kept 3 years to keep your report up to date, then deleted. You can delete everything at any time. At most three homes and three Home Assistant installations per account, only one per home; free during the beta. Conditions: {conditions}\n\nConsumption data may reflect the activity of the people living in the home. If you share this home, consider informing them that you use this service.\n\nSBG Energy account: {compte}. Home: {logement}.",
         "data": {
           "envoi_actif": "Send to analyse.sbg-energy.com",
           "code_postal": "Postcode",
+          "grd": "Distribution system operator (optional)",
           "ameliorer_outils": "Improve SBG tools",
+          "logement": "Home",
           "pas_envoi": "Step sent (minutes)",
           "deconnecter": "Disconnect my SBG Energy account"
         },
         "data_description": {
           "envoi_actif": "Ticking it starts the connection to your SBG Energy account: a code to enter on auth.sbg-energy.com. No password is stored in Home Assistant.",
           "code_postal": "Required to send (Home Assistant does not know it). Used for grid tariffs, region and the area's weather, never for an address. Can also be changed in your account.",
+          "grd": "The company that runs your meter (shown on your bill). Used for grid tariffs. \"I don't know\": the service infers it from your postcode when only one operator is possible, or keeps the one given on your home's page.",
           "ameliorer_outils": "Optional, unticked by default. \"I agree that SBG keeps my consumption data, pseudonymised, to improve its tools (simulator, SBG Home). I can withdraw this consent at any time.\" Only if ticked: each month received is used, 90 days later, for postcode statistics (monthly totals without name, published from 10 households) and a pseudonymised copy. Unticking erases the copies; totals already given, anonymous, can no longer be traced.",
+          "logement": "The home of your SBG Energy account that receives this installation's data. Choosing another moves this source there.",
           "pas_envoi": "5 only with the \"finest step: 5 minutes\" option.",
           "deconnecter": "Forgets the connection here and withdraws it at SBG Energy; nothing is sent anymore."
         }
@@ -78,6 +82,16 @@
       "connexion": {
         "title": "Connect your SBG Energy account",
         "description": "Open {url} and enter the code **{code}**, then sign in to your SBG Energy account (with your 6-digit code) and accept. This screen closes by itself (10 minutes at most)."
+      },
+      "logement": {
+        "title": "Your home",
+        "description": "This installation's data join the home **{logement}** of your SBG Energy account: its report will use them. If your account has several homes, you can choose another one below; you can also move this source later, here or from the home's page.",
+        "data": {
+          "logement": "Home"
+        },
+        "data_description": {
+          "logement": "The home of your SBG Energy account that receives this installation's data. Choosing another moves this source there."
+        }
       }
     },
     "progress": {
@@ -91,7 +105,8 @@
     "error": {
       "pas_5_sans_option": "The 5-minute step needs the \"finest step: 5 minutes\" option.",
       "code_postal": "A 4-digit Belgian postcode is required to send.",
-      "reglages_refuses": "The service refused: {message}"
+      "reglages_refuses": "The service refused: {message}",
+      "installation_effacee": "This installation's data were deleted from your SBG Energy account: sending is off and no longer retries. To resume it, first allow this installation again from your account, then tick \"Send to analyse.sbg-energy.com\"."
     }
   },
   "selector": {
@@ -122,6 +137,18 @@
         "5": "5 minutes",
         "15": "15 minutes",
         "60": "Hourly"
+      }
+    },
+    "grd": {
+      "options": {
+        "inconnu": "I don't know",
+        "ores": "ORES",
+        "resa": "RESA",
+        "aieg": "AIEG",
+        "aiesh": "AIESH",
+        "rew": "REW",
+        "sibelga": "Sibelga",
+        "fluvius": "Fluvius"
       }
     }
   },

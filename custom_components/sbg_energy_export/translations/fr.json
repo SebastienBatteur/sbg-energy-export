@@ -59,18 +59,22 @@
       },
       "envoi": {
         "title": "Envoi à analyse.sbg-energy.com",
-        "description": "**Désactivé par défaut.** Activé, l'intégration envoie à analyse.sbg-energy.com le MÊME contenu que l'export manuel (réseau, solaire, batterie, consommation de la maison et seulement les appareils choisis, sous un nom neutre, au pas choisi), avec votre code postal, au plus une fois par mois (à partir du 2), seulement les jours que le service n'a pas encore. C'est le seul appel réseau sortant de l'intégration. Finalité : le rapport de votre compte SBG Energy, mis à jour à chaque envoi, et l'alerte « meilleure offre » par e-mail ; et seulement si vous cochez « Améliorer les outils SBG », les statistiques par code postal et une copie pseudonymisée. Pas de 5 minutes gardé 12 mois puis regroupé au quart d'heure, tout supprimé après 3 ans glissants ; 3 installations au plus par compte ; effaçable depuis votre compte ; gratuit pendant la bêta. Conditions : {conditions}\n\nLes données de consommation peuvent refléter l'activité des personnes vivant dans le logement. Si vous partagez ce logement, pensez à les informer de l'utilisation de ce service.\n\nCompte SBG Energy : {compte}.",
+        "description": "**Désactivé par défaut.** Activé, l'intégration envoie à analyse.sbg-energy.com le MÊME contenu que l'export manuel (réseau, solaire, batterie, consommation de la maison et seulement les appareils choisis, sous un nom neutre, au pas choisi), avec votre code postal, au plus une fois par mois (à partir du 2), seulement les jours que le service n'a pas encore. C'est le seul appel réseau sortant de l'intégration. Ces données sont une source de votre logement. Finalités : le rapport de votre logement, mis à jour à chaque envoi, et l'alerte « meilleure offre » par e-mail ; et seulement si vous cochez « Améliorer les outils SBG », les statistiques par code postal et une copie pseudonymisée. Le pas de 5 minutes est gardé 12 mois, puis regroupé au quart d'heure. Vos fichiers bruts sont supprimés après 90 jours. Avec un compte, les mesures de votre logement sont gardées 3 ans pour tenir votre rapport à jour, puis supprimées. Vous pouvez tout supprimer à tout moment. Trois logements et trois installations Home Assistant au plus par compte, une seule par logement ; gratuit pendant la bêta. Conditions : {conditions}\n\nLes données de consommation peuvent refléter l'activité des personnes vivant dans le logement. Si vous partagez ce logement, pensez à les informer de l'utilisation de ce service.\n\nCompte SBG Energy : {compte}. Logement : {logement}.",
         "data": {
           "envoi_actif": "Envoyer à analyse.sbg-energy.com",
           "code_postal": "Code postal",
+          "grd": "Gestionnaire de réseau (facultatif)",
           "ameliorer_outils": "Améliorer les outils SBG",
+          "logement": "Logement",
           "pas_envoi": "Pas envoyé (minutes)",
           "deconnecter": "Déconnecter mon compte SBG Energy"
         },
         "data_description": {
           "envoi_actif": "Le cocher lance la connexion à votre compte SBG Energy : un code à saisir sur auth.sbg-energy.com. Aucun mot de passe n'est enregistré dans Home Assistant.",
           "code_postal": "Obligatoire pour envoyer (Home Assistant ne le connaît pas). Il sert aux tarifs du réseau, à la région et à la météo de la zone, jamais à une adresse. Modifiable aussi dans votre compte.",
+          "grd": "Celui qui gère votre compteur (il figure sur votre facture). Il sert aux tarifs du réseau. « Je ne sais pas » : le service le déduit de votre code postal quand il n'y a qu'un gestionnaire possible, ou garde celui donné sur la page de votre logement.",
           "ameliorer_outils": "Facultatif, décoché par défaut. « J'accepte que SBG garde mes données de consommation, pseudonymisées, pour améliorer ses outils (simulateur, SBG Home). Je peux retirer cet accord à tout moment. » Seulement si coché : chaque mois reçu sert, 90 jours après, aux statistiques par code postal (totaux mensuels sans nom, publiés à partir de 10 foyers) et à une copie pseudonymisée. Décocher efface les copies ; les totaux déjà versés, anonymes, ne peuvent plus être retrouvés.",
+          "logement": "Le logement de votre compte SBG Energy qui reçoit les données de cette installation. En choisir un autre y déplace cette source.",
           "pas_envoi": "5 seulement avec l'option « pas plus fin : 5 minutes ».",
           "deconnecter": "Oublie la connexion ici et la retire chez SBG Energy ; plus rien n'est envoyé."
         }
@@ -78,6 +82,16 @@
       "connexion": {
         "title": "Connecter votre compte SBG Energy",
         "description": "Ouvrez {url} et saisissez le code **{code}**, puis connectez-vous à votre compte SBG Energy (avec votre code à 6 chiffres) et acceptez. Cet écran se ferme seul (10 minutes au plus)."
+      },
+      "logement": {
+        "title": "Votre logement",
+        "description": "Les données de cette installation rejoignent le logement **{logement}** de votre compte SBG Energy : c'est son rapport qui en tiendra compte. Si votre compte a plusieurs logements, vous pouvez en choisir un autre ci-dessous ; vous pourrez aussi déplacer cette source plus tard, ici ou depuis la page du logement.",
+        "data": {
+          "logement": "Logement"
+        },
+        "data_description": {
+          "logement": "Le logement de votre compte SBG Energy qui reçoit les données de cette installation. En choisir un autre y déplace cette source."
+        }
       }
     },
     "progress": {
@@ -91,7 +105,8 @@
     "error": {
       "pas_5_sans_option": "Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes ».",
       "code_postal": "Code postal belge à 4 chiffres attendu (obligatoire pour envoyer).",
-      "reglages_refuses": "Le service a refusé : {message}"
+      "reglages_refuses": "Le service a refusé : {message}",
+      "installation_effacee": "Les données de cette installation ont été supprimées depuis votre compte SBG Energy : l'envoi est coupé et ne réessaie plus. Pour le reprendre, autorisez d'abord cette installation à nouveau depuis votre compte, puis cochez « Envoyer à analyse.sbg-energy.com »."
     }
   },
   "selector": {
@@ -122,6 +137,18 @@
         "5": "5 minutes",
         "15": "15 minutes",
         "60": "Horaire"
+      }
+    },
+    "grd": {
+      "options": {
+        "inconnu": "Je ne sais pas",
+        "ores": "ORES",
+        "resa": "RESA",
+        "aieg": "AIEG",
+        "aiesh": "AIESH",
+        "rew": "REW",
+        "sibelga": "Sibelga",
+        "fluvius": "Fluvius"
       }
     }
   },
