@@ -20,7 +20,7 @@ yourself to an analysis service such as analyse.sbg-energy.com.
   integration picks up those ~10 days at installation, then records every quarter-hour (or,
   optionally, every 5-minute period) as it goes.
 
-> Status: **version 0.5.0, beta**. Apache-2.0 licence. User interface in English, French, Dutch and
+> Status: **version 0.6.0, beta**. Apache-2.0 licence. User interface in English, French, Dutch and
 > German. Problems and ideas: [issues](https://github.com/SebastienBatteur/sbg-energy-export/issues);
 > security vulnerabilities: see [SECURITY.md](SECURITY.md). Version history: [CHANGELOG.md](CHANGELOG.md).
 
@@ -87,9 +87,11 @@ your account.** It is the integration's **only outgoing network call**.
 
 1. **Configure** → last step **"Send to analyse.sbg-energy.com"** → tick **Send to
    analyse.sbg-energy.com**, give your **postcode** (required: Home Assistant does not know it;
-   it is used for grid tariffs, region and the area's weather, never for an address), choose the
-   step (15 min or hourly; 5 min with the 5-minute option) and, if you wish, tick **Improve SBG
-   tools** (see below; unticked by default).
+   it is used for grid tariffs, region and the area's weather, never for an address), your
+   **distribution system operator** if you know it (optional: "I don't know" by default, the
+   service then infers it from the postcode when only one is possible), choose the step (15 min
+   or hourly; 5 min with the 5-minute option) and, if you wish, tick **Improve SBG tools** (see
+   below; unticked by default).
 2. The screen shows a **link** and a **code**: open the link (phone or computer), sign in to your
    **SBG Energy account** (with your 6-digit code), enter the code and accept. That's all: **once**.
    - No password or secret is stored in Home Assistant: only a revocable **token**, kept in the
@@ -97,8 +99,12 @@ your account.** It is the integration's **only outgoing network call**.
 3. The postcode and the tick box reach the service right after the connection: the report is
    computed from the first send. **At most three Home Assistant installations per account**: the
    fourth is refused at this step (nothing is enabled, the token is withdrawn); you can disconnect
-   one from your account. Changing the postcode or the tick box later, in the same step, makes one
-   call to the service when you save (account connected).
+   one from your account. Changing the postcode, the operator or the tick box later, in the same
+   step, makes one call to the service when you save (account connected).
+4. **Your home**: the data join a home of your SBG Energy account, and its report uses them. When
+   the service says so, the integration shows that home right after the connection and, if your
+   account has several, lets you choose another one (there, or later in the Send step).
+   Otherwise the service files the installation by postcode.
 
 What is sent, and when:
 
@@ -118,11 +124,12 @@ What is sent, and when:
 - Once a week the integration renews its token at **auth.sbg-energy.com** (no data at all);
   otherwise the connection would expire after 30 days unused.
 
-What the service does with it: **the report in your account**, updated at each send, and a
+What the service does with it: **the report of your home**, updated at each send, and a
 **"better offer" e-mail alert** (no consumption data in it). The 5-minute step is kept **12
 months** there (to understand behaviours), then grouped into quarter-hours (to follow their
-evolution); everything is deleted after **3 rolling years**, erasable from your account, erased if
-you delete your account. **Free during the beta.**
+evolution). Your raw files are deleted after 90 days. With an account, your home's measurements are
+kept **3 years** to keep your report up to date, then deleted. You can delete everything at any
+time. **Free during the beta.**
 
 **Improve SBG tools** (optional tick box, **unticked by default**, the same as on the upload form:
 "I agree that SBG keeps my consumption data, pseudonymised, to improve its tools (simulator, SBG
@@ -134,7 +141,10 @@ longer be traced.
 Conditions (French): <https://analyse.sbg-energy.com/conditions/#home-assistant>.
 
 To stop: untick sending, or **Disconnect my SBG Energy account** in the same step. From your
-account you can also **disconnect Home Assistant** and **erase** what was sent.
+account you can also **disconnect Home Assistant** and **erase** what was sent. An installation
+erased from your account is refused afterwards: the integration then **turns sending off** and
+says so (notification, and in the Send step), without retrying every day. To resume, allow it
+again from your account, then tick sending again.
 
 The **Last send** diagnostic sensor shows the date of the last send.
 
@@ -200,8 +210,9 @@ See [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) (French):
   yourself wherever you want. The integration makes no outgoing network call until direct sending
   is turned on **and** your account connected.
 - **What direct sending transmits**: only the content of the export (energy per period for grid,
-  solar, battery, home and the chosen devices under a neutral name), your postcode, the "Improve
-  SBG tools" choice a random installation identifier and the
+  solar, battery, home and the chosen devices under a neutral name), your postcode, the
+  distribution system operator if chosen, the home if chosen from the service's list, the "Improve
+  SBG tools" choice, a random installation identifier and the
   integration version (`User-Agent` header). Never an entity name, device name, room,
   address or location.
 - **Data controller, purposes, retention periods, rights (access, rectification, erasure,

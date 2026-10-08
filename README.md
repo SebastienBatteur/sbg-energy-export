@@ -21,7 +21,7 @@ sur un service d'analyse comme analyse.sbg-energy.com.
   L'intégration reprend ces ~10 jours à l'installation, puis enregistre chaque quart d'heure (ou,
   en option, chaque période de 5 minutes) au fil de l'eau.
 
-> Statut : **version 0.5.0, bêta**. Licence Apache-2.0. Interface en français, anglais, néerlandais
+> Statut : **version 0.6.0, bêta**. Licence Apache-2.0. Interface en français, anglais, néerlandais
 > et allemand. Problèmes et idées : [issues](https://github.com/SebastienBatteur/sbg-energy-export/issues) ;
 > faille de sécurité : voir [SECURITY.md](SECURITY.md). Historique des versions : [CHANGELOG.md](CHANGELOG.md).
 
@@ -99,8 +99,10 @@ activé ET connecté votre compte.** C'est le **seul appel réseau sortant** de 
 1. **Configurer** → dernière étape **« Envoi à analyse.sbg-energy.com »** → cocher **Envoyer à
    analyse.sbg-energy.com**, donner votre **code postal** (obligatoire : Home Assistant ne le
    connaît pas ; il sert aux tarifs du réseau, à la région et à la météo de la zone, jamais à une
-   adresse), choisir le pas (15 min ou horaire ; 5 min avec l'option des 5 minutes) et, si vous
-   le voulez, cocher **Améliorer les outils SBG** (voir plus bas ; décoché par défaut).
+   adresse), si vous le connaissez votre **gestionnaire de réseau** (facultatif : « Je ne sais
+   pas » par défaut, le service le déduit alors du code postal quand il n'y en a qu'un possible),
+   choisir le pas (15 min ou horaire ; 5 min avec l'option des 5 minutes) et, si vous le voulez,
+   cocher **Améliorer les outils SBG** (voir plus bas ; décoché par défaut).
 2. L'écran affiche un **lien** et un **code** : ouvrez le lien (sur votre téléphone ou votre
    ordinateur), connectez-vous à votre **compte SBG Energy** (avec votre code à 6 chiffres),
    saisissez le code et acceptez. C'est tout : **une seule fois**.
@@ -110,8 +112,14 @@ activé ET connecté votre compte.** C'est le **seul appel réseau sortant** de 
 3. Le code postal et la case partent au service juste après la connexion : le rapport se
    calcule dès le premier envoi. **Trois installations Home Assistant au plus par compte** : la
    quatrième est refusée à cette étape (rien n'est activé, le jeton est retiré) ; vous pouvez en
-   déconnecter une depuis votre compte. Changer le code postal ou la case plus tard, dans la même
-   étape, fait un appel au service au moment où vous enregistrez (compte connecté).
+   déconnecter une depuis votre compte. Changer le code postal, le gestionnaire ou la case plus
+   tard, dans la même étape, fait un appel au service au moment où vous enregistrez (compte
+   connecté).
+4. **Votre logement** : les données rejoignent un logement de votre compte SBG Energy, et c'est
+   son rapport qui en tient compte. Quand le service le dit, l'intégration affiche ce logement
+   juste après la connexion et, si votre compte en a plusieurs, vous laisse en choisir un autre
+   (ici, ou plus tard dans l'étape Envoi). Sinon, le service range l'installation d'après le code
+   postal.
 
 Ce qui part, et quand :
 
@@ -131,13 +139,13 @@ Ce qui part, et quand :
 - Une fois par semaine, l'intégration renouvelle son jeton auprès de **auth.sbg-energy.com**
   (sans aucune donnée) : sans cela, la connexion expirerait après 30 jours sans usage.
 
-Ce que le service en fait : **le rapport de votre compte**, mis à jour à chaque envoi, et une
+Ce que le service en fait : **le rapport de votre logement**, mis à jour à chaque envoi, et une
 **alerte « meilleure offre »** par e-mail (sans aucune donnée de consommation) quand une offre
 analysée est moins chère que votre contrat d'au moins 40 € et 5 % par an, deux mois de suite.
 Le pas de 5 minutes y est gardé **12 mois** (pour comprendre les comportements), puis regroupé au
-quart d'heure (pour suivre leur évolution) ; tout est supprimé après **3 ans glissants**,
-effaçable depuis votre compte, effacé si vous supprimez votre compte. **Gratuit pendant la
-bêta.**
+quart d'heure (pour suivre leur évolution). Vos fichiers bruts sont supprimés après 90 jours.
+Avec un compte, les mesures de votre logement sont gardées **3 ans** pour tenir votre rapport à
+jour, puis supprimées. Vous pouvez tout supprimer à tout moment. **Gratuit pendant la bêta.**
 
 **Améliorer les outils SBG** (case facultative, **décochée par défaut**, la même que sur le
 formulaire de dépôt : « J'accepte que SBG garde mes données de consommation, pseudonymisées, pour
@@ -151,7 +159,10 @@ retrouvés. Conditions :
 
 Arrêter : décocher l'envoi (plus rien ne part), ou **Déconnecter mon compte SBG Energy** dans la
 même étape (le jeton est oublié et retiré chez SBG Energy). Depuis votre compte, vous pouvez
-aussi **déconnecter Home Assistant** et **effacer** ce qui a été envoyé.
+aussi **déconnecter Home Assistant** et **effacer** ce qui a été envoyé. Une installation
+effacée depuis votre compte est refusée ensuite : l'intégration **coupe alors l'envoi** et le dit
+(notification, et dans l'étape Envoi), sans réessayer chaque jour. Pour reprendre, autorisez-la à
+nouveau depuis votre compte, puis recochez l'envoi.
 
 Le capteur de diagnostic **Dernier envoi** donne la date du dernier envoi (attributs : prochain
 envoi permis, jours envoyés).
@@ -179,7 +190,7 @@ envoi permis, jours envoyés).
   5 minutes, **1,74 Mo** avec le regroupement après 12 mois (39 % de moins).
 - `<config>/sbg_energy_export/exports/` : les exports produits (à supprimer quand vous voulez).
 - `.storage/sbg_energy_export.collecteur` : la dernière période traitée, les statistiques suivies.
-- `.storage/sbg_energy_export.envoi` (envoi direct seulement) : date du dernier envoi et du prochain permis ; le jeton est dans l'entrée de configuration (`.storage/core.config_entries`), comme pour les autres intégrations.
+- `.storage/sbg_energy_export.envoi` (envoi direct seulement) : date du dernier envoi et du prochain permis, derniers réglages vus chez le service (dont le nom du logement, s'il le donne) ; le jeton est dans l'entrée de configuration (`.storage/core.config_entries`), comme pour les autres intégrations.
 
 Au démarrage, l'intégration rattrape les périodes manquantes tant que Home Assistant a encore
 leurs statistiques de 5 minutes (~10 jours) : un arrêt plus long laisse un trou, rempli à l'export
@@ -224,7 +235,8 @@ Voir [docs/PROCEDURE_MANUELLE.md](docs/PROCEDURE_MANUELLE.md) :
   tant que l'envoi direct n'est pas activé **et** votre compte connecté.
 - **Ce qui part avec l'envoi direct** : uniquement le contenu de l'export (énergie par période du
   réseau, du solaire, de la batterie, de la maison et des appareils choisis sous un nom neutre),
-  votre code postal, la case « Améliorer les outils SBG » un identifiant aléatoire de
+  votre code postal, le gestionnaire de réseau s'il est choisi, le logement s'il est choisi dans
+  la liste du service, la case « Améliorer les outils SBG », un identifiant aléatoire de
   l'installation et la version de l'intégration (en-tête `User-Agent`). Jamais de nom d'entité, de nom d'appareil, de pièce, d'adresse ni de position.
 - **Responsable du traitement, finalités, durées de conservation, droits (accès, rectification,
   effacement, retrait du consentement) et contact** : voir les conditions du service,
