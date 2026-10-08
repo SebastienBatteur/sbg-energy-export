@@ -30,6 +30,16 @@ coché « Envoyer à analyse.sbg-energy.com » ET connecté son compte SBG Energ
   une 4e installation pour le même compte (le jeton est alors oublié et révoqué).
 * **Pas de 5 min** : le service et l'intégration ne gardent le pas de 5 min que
   12 mois ; les jours plus anciens partent au quart d'heure, dans la même session.
+* **Logement et gestionnaire de réseau** (0.6.0, ADR-040 étape 7) : les réglages peuvent
+  porter le gestionnaire de réseau (facultatif, jamais « je ne sais pas ») et le logement
+  choisi. Le service range l'installation dans un logement du compte ; s'il le dit dans sa
+  réponse (champs facultatifs ``logement`` et ``logements``), l'intégration l'affiche et
+  laisse choisir. Sans ces champs (service plus ancien), rien ne change : le service range
+  par code postal, comme pour 0.5.
+* **Installation effacée** (0.6.0) : si le titulaire a fait effacer les données de cette
+  installation depuis son compte, le service refuse tout (``installation_effacee``).
+  L'intégration coupe alors l'envoi, le dit (notification persistante, et dans les options)
+  et ne réessaie plus : sans cela, la tâche quotidienne redemanderait chaque jour.
 """
 from __future__ import annotations
 
@@ -56,11 +66,13 @@ from .const import (
     DATA_JETON,
     DATA_SOURCE,
     DOMAIN,
+    GRDS,
     JOURS_PAR_MORCEAU,
     OCTETS_MAX,
     OPT_AMELIORER,
     OPT_CODE_POSTAL,
     OPT_ENVOI,
+    OPT_GRD,
     OPT_PAS_ENVOI,
     PAS_ENVOI_DEFAUT,
     PORTEES,
@@ -79,6 +91,8 @@ URL_JETON = f"{AUTH_URL}/protocol/openid-connect/token"
 URL_APPAREIL = f"{AUTH_URL}/protocol/openid-connect/auth/device"
 URL_REVOCATION = f"{AUTH_URL}/protocol/openid-connect/revoke"
 AGENT = f"sbg-energy-export/{VERSION} (Home Assistant)"
+EFFACEE = "installation_effacee"   # code d'erreur du service : données de l'installation effacées
+NOTIF_EFFACEE = f"{DOMAIN}_installation_effacee"
 
 
 class EnvoiErreur(HomeAssistantError):
@@ -196,6 +210,22 @@ class Etat:
         return lambda: self._ecouteurs.remove(ecouteur)
 
     @property
+    def effacee(self) -> bool:
+        """Le service a répondu ``installation_effacee`` : l'envoi a été coupé ici."""
+        return bool(self.donnees.get("effacee"))
+
+    @property
+    def logement(self) -> dict[str, str] | None:
+        """Logement où l'installation envoie, si le service l'a dit (0.6.0)."""
+        lg = self.donnees.get("logement")
+        return lg if isinstance(lg, dict) and lg.get("id") else None
+
+    @property
+    def logements(self) -> list[dict[str, str]]:
+        """Logements du compte proposés par le service (vide si le service ne les donne pas)."""
+        return [lg for lg in self.donnees.get("logements") or [] if isinstance(lg, dict) and lg.get("id")]
+
+    @property
     def prochaine(self) -> date | None:
         p = self.donnees.get("prochaine")
         return date.fromisoformat(p) if p else None
@@ -298,15 +328,76 @@ class Bilan:
     compte: str | None = None
 
 
-async def async_reglages(hass: HomeAssistant, entree: ConfigEntry, code_postal: str, accord: bool) -> dict[str, Any]:
-    """Code postal et accord « Améliorer les outils SBG » de cette installation, au service.
-    Lève EnvoiErreur (message du service tel quel : 4e installation, code postal inconnu…)."""
+def _un_logement(v: Any) -> dict[str, str] | None:
+    """``{"id", "nom"}`` du service, en texte ; None si la forme n'est pas celle attendue."""
+    if not isinstance(v, dict) or v.get("id") in (None, "") or isinstance(v.get("id"), bool):
+        return None
+    return {"id": str(v["id"])[:64], "nom": str(v.get("nom") or v["id"])[:100]}
+
+
+def logements_de(reponse: dict[str, Any]) -> dict[str, Any]:
+    """Champs facultatifs ``logement`` et ``logements`` d'une réponse du service (0.6.0).
+
+    Rend seulement ce que le service a donné : un service qui ne les connaît pas encore ne
+    change rien à ce qui est gardé (comportement de 0.5)."""
+    out: dict[str, Any] = {}
+    if "logement" in reponse:
+        out["logement"] = _un_logement(reponse["logement"])
+    if isinstance(reponse.get("logements"), list):
+        out["logements"] = [lg for lg in map(_un_logement, reponse["logements"]) if lg]
+    return out
+
+
+async def async_reglages(hass: HomeAssistant, entree: ConfigEntry, code_postal: str, accord: bool,
+                         grd: str = "", logement: str | None = None) -> dict[str, Any]:
+    """Code postal, accord « Améliorer les outils SBG », gestionnaire de réseau (facultatif) et
+    logement (seulement s'il a été choisi dans la liste donnée par le service), au service.
+    Lève EnvoiErreur (message du service tel quel : 4e installation, code postal inconnu…).
+
+    ``grd`` vide ou « je ne sais pas » n'est pas envoyé : le service garde le gestionnaire qu'il
+    connaît (donné sur la page du logement) ou le déduit du code postal quand il est certain ;
+    une déduction faite ici passerait, chez le service, pour une déclaration du client."""
     etat: Etat = entree.runtime_data.etat
-    r = await Client(hass, entree, etat).async_requete(
-        "POST", "reglages", json={"source": entree.data.get(DATA_SOURCE), "code_postal": code_postal,
-                                  "accord_amelioration": bool(accord)})
-    await etat.async_noter(reglages=r.get("reglages"))
+    corps: dict[str, Any] = {"source": entree.data.get(DATA_SOURCE), "code_postal": code_postal,
+                             "accord_amelioration": bool(accord)}
+    if grd in GRDS:
+        corps[OPT_GRD] = grd
+    if logement:
+        corps["logement"] = logement
+    try:
+        r = await Client(hass, entree, etat).async_requete("POST", "reglages", json=corps)
+    except EnvoiErreur as e:
+        if e.code == EFFACEE:
+            await async_couper_effacee(hass, entree, e)
+        raise
+    await etat.async_noter(reglages=r.get("reglages"), effacee=False, **logements_de(r))
+    persistent_notification.async_dismiss(hass, NOTIF_EFFACEE)
     return r
+
+
+async def async_couper_effacee(hass: HomeAssistant, entree: ConfigEntry, e: EnvoiErreur) -> None:
+    """Installation effacée depuis le compte : l'envoi est coupé ici, une notification le dit, et
+    plus aucun essai ne part (la tâche quotidienne ne fait rien tant que l'envoi est décoché).
+
+    Les options changent sans recharger l'entrée (le collecteur continue) : ``actif()`` relit les
+    options à chaque fois."""
+    etat: Etat = entree.runtime_data.etat
+    if not etat.effacee:
+        _LOGGER.warning("Envoi SBG Energy coupé : %s", e.message)
+    await etat.async_noter(effacee=True, logement=None, logements=[])
+    persistent_notification.async_create(
+        hass,
+        f"{e.message}\n\n**L'envoi automatique est coupé dans Home Assistant** : il ne réessaiera plus. "
+        "Pour le reprendre : autorisez d'abord cette installation à nouveau depuis votre compte SBG Energy, "
+        "puis cochez de nouveau « Envoyer à analyse.sbg-energy.com » dans les options de l'intégration "
+        "(Configurer, étape Envoi). Les mesures gardées dans Home Assistant ne sont pas touchées.",
+        title="SBG Energy Export : envoi coupé", notification_id=NOTIF_EFFACEE)
+    if entree.options.get(OPT_ENVOI):
+        options = {**entree.options, OPT_ENVOI: False}
+        # AVANT la mise à jour : l'écouteur des options (tâche immédiate) compare à celles-ci et ne
+        # recharge donc pas l'entrée
+        entree.runtime_data.options = dict(options)
+        hass.config_entries.async_update_entry(entree, options=options)
 
 
 async def _envoyer_jours(hass: HomeAssistant, entree: ConfigEntry, client: Client, sid: str, mode: str, pas: int,
@@ -350,11 +441,13 @@ async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode:
     client = Client(hass, entree, etat)
     j = await client.async_requete("GET", "jours", params={"source": source, "pas": str(pas)})
     serveur = j.get("reglages") or {}
-    await etat.async_noter(reglages=serveur)
+    await etat.async_noter(reglages=serveur, **logements_de(j))
     cp = str(entree.options.get(OPT_CODE_POSTAL) or "")
     if cp and not serveur.get("code_postal"):
-        # réglages pas encore arrivés au service (réseau coupé à la connexion) : on les redonne
-        await async_reglages(hass, entree, cp, bool(entree.options.get(OPT_AMELIORER)))
+        # réglages pas encore arrivés au service (réseau coupé à la connexion, ou installation
+        # effacée depuis le compte : le service le dit ici) : on les redonne
+        await async_reglages(hass, entree, cp, bool(entree.options.get(OPT_AMELIORER)),
+                             str(entree.options.get(OPT_GRD) or ""))
     synchro = j.get("synchro") or {}
     if mode == "complement" and not synchro.get("permise"):
         await etat.async_noter(prochaine=synchro.get("prochaine"))
@@ -365,7 +458,12 @@ async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode:
     ouverture: dict[str, Any] = {"source": source, "pas": pas, "mode": mode}
     if periode:
         ouverture.update(debut=periode[0].isoformat(), fin=periode[1].isoformat())
-    s = await client.async_requete("POST", "synchros", json=ouverture)
+    try:
+        s = await client.async_requete("POST", "synchros", json=ouverture)
+    except EnvoiErreur as e:
+        if e.code == EFFACEE:
+            await async_couper_effacee(hass, entree, e)
+        raise
     jour_min = date.fromisoformat(j.get("jour_min") or s.get("jour_min") or "2000-01-01")
     fin = fin_envoyable()
     if periode:
@@ -429,8 +527,9 @@ async def async_synchroniser(hass: HomeAssistant, entree: ConfigEntry, manuel: b
     try:
         bilan = await _session(hass, entree, "complement", None, manuel)
     except EnvoiErreur as e:
-        _LOGGER.warning("Envoi SBG Energy non fait : %s", e.message)
-        _notifier(hass, f"Rien n'a été envoyé : {e.message}")
+        if e.code != EFFACEE:                     # déjà dit par sa propre notification
+            _LOGGER.warning("Envoi SBG Energy non fait : %s", e.message)
+            _notifier(hass, f"Rien n'a été envoyé : {e.message}")
         raise
     if bilan is not None:
         _LOGGER.info("Envoi SBG Energy : %d jour(s) envoyé(s)", bilan.jours)
@@ -445,8 +544,9 @@ async def async_reimporter(hass: HomeAssistant, entree: ConfigEntry, debut: date
     try:
         bilan = await _session(hass, entree, "remplacement", (debut, fin), True)
     except EnvoiErreur as e:
-        _LOGGER.warning("Réimport SBG Energy non fait : %s", e.message)
-        _notifier(hass, f"Réimport non fait : {e.message}")
+        if e.code != EFFACEE:
+            _LOGGER.warning("Réimport SBG Energy non fait : %s", e.message)
+            _notifier(hass, f"Réimport non fait : {e.message}")
         raise
     assert bilan is not None
     _notifier(hass, _texte_bilan(bilan, "remplacement"))

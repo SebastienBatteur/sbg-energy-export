@@ -47,6 +47,14 @@ OPT_DECONNECTER: Final = "deconnecter"
 # d'adresse) et case FACULTATIVE « Améliorer les outils SBG », décochée par défaut.
 OPT_CODE_POSTAL: Final = "code_postal"
 OPT_AMELIORER: Final = "ameliorer_outils"
+# Version 0.6.0 (ADR-040, étape 7) : gestionnaire du réseau de distribution, FACULTATIF, et
+# logement du compte où l'installation envoie (choisi seulement si le service en donne la liste).
+# « inconnu » (« je ne sais pas ») n'est jamais envoyé : le service garde la valeur qu'il a, ou
+# déduit le gestionnaire du code postal quand il est certain.
+OPT_GRD: Final = "grd"
+OPT_LOGEMENT: Final = "logement"
+GRD_INCONNU: Final = "inconnu"
+GRDS: Final = ("ores", "resa", "aieg", "aiesh", "rew", "sibelga", "fluvius")
 PAS_ENVOI_DEFAUT: Final = 15
 DATA_JETON: Final = "jeton_rafraichissement"   # jeton de rafraîchissement (jamais journalisé)
 DATA_SOURCE: Final = "source"                   # identifiant ALÉATOIRE de cette installation

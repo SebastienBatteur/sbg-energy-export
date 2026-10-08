@@ -65,6 +65,11 @@ class Serveur:
         self.revocations = 0
         self.reglages: dict = {}                 # code postal et accord connus du service
         self.refus_reglages: tuple[str, str] | None = None
+        self.statut_refus = 403
+        self.refus_synchros: tuple[str, str] | None = None
+        # 0.6.0 : champs facultatifs de la réponse ; None = service qui ne les connaît pas (0.5)
+        self.logements: list[dict] | None = None
+        self.logement: dict | None = None
         self.appels_reglages: list[dict] = []
         self.jour_min_5min = "2025-01-06"
 
@@ -113,12 +118,22 @@ class Serveur:
             d = data if isinstance(data, dict) else json.loads(data)
             self.appels_reglages.append(d)
             if self.refus_reglages:
-                return self.r(method, url, 403, code=self.refus_reglages[0], message=self.refus_reglages[1])
+                return self.r(method, url, self.statut_refus, code=self.refus_reglages[0],
+                              message=self.refus_reglages[1])
             self.reglages = {"code_postal": d["code_postal"], "accord_amelioration": d["accord_amelioration"]}
-            return self.r(method, url, reglages=self.reglages, copies_effacees=0)
+            extra: dict = {}
+            if self.logements is not None:
+                if "logement" in d:
+                    self.logement = next(lg for lg in self.logements if str(lg["id"]) == d["logement"])
+                extra = {"logement": self.logement, "logements": self.logements}
+            elif self.logement is not None:
+                extra = {"logement": self.logement}
+            return self.r(method, url, reglages=self.reglages, copies_effacees=0, **extra)
         if chemin == "synchros":
             d = data if isinstance(data, dict) else json.loads(data)
             self.ouvertures.append(d)
+            if self.refus_synchros:
+                return self.r(method, url, 409, code=self.refus_synchros[0], message=self.refus_synchros[1])
             if d["mode"] == "remplacement":
                 if self.reimports <= 0:
                     return self.r(method, url, 429, code="limite_reimports",

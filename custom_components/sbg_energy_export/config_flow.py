@@ -11,6 +11,13 @@ facultative « Améliorer les outils SBG », décochée par défaut, retirable �
 moment ; ces deux réglages partent au service quand on les enregistre (compte
 connecté), et c'est là que le service refuse une 4e installation par compte.
 
+Version 0.6.0 (ADR-040, étape 7) : la même étape porte le gestionnaire de réseau,
+FACULTATIF (« je ne sais pas » par défaut : le service le déduit du code postal quand il
+est certain) ; après la connexion, une étape « Logement » dit où les données arrivent et,
+si le service donne la liste des logements du compte, laisse en choisir un autre. Un
+service qui ne donne pas ces champs garde le comportement de 0.5 (rangement par code
+postal, aucune étape de plus).
+
 L'écran de sélection classe les appareils par intérêt pour l'analyse (gros
 consommateurs et pilotables, puis cuisson et lavage, puis consommation de fond),
 dit pourquoi en une phrase, et coche par défaut les recommandés ; la catégorie
@@ -55,6 +62,8 @@ from .const import (
     DATA_JETON,
     DATA_SOURCE,
     DOMAIN,
+    GRD_INCONNU,
+    GRDS,
     OPT_AMELIORER,
     OPT_APPAREILS,
     OPT_CATEGORIES,
@@ -64,6 +73,8 @@ from .const import (
     OPT_CONSERVATION,
     OPT_DECONNECTER,
     OPT_ENVOI,
+    OPT_GRD,
+    OPT_LOGEMENT,
     OPT_PAS_ENVOI,
     PAS_ENVOI_DEFAUT,
     URL_CONDITIONS,
@@ -278,24 +289,57 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
     async def _async_terminer(self) -> ConfigFlowResult:
         return await self.async_step_envoi()
 
+    def _etat(self) -> envoi.Etat | None:
+        return getattr(getattr(self.config_entry, "runtime_data", None), "etat", None)
+
     def _reglages_connus(self) -> dict[str, Any]:
         """Derniers réglages vus chez le service (ils ont pu changer depuis le compte), sinon les options."""
-        etat = getattr(getattr(self.config_entry, "runtime_data", None), "etat", None)
+        etat = self._etat()
         serveur = (etat.donnees.get("reglages") if etat else None) or {}
+        grd = serveur.get("grd") or self._options.get(OPT_GRD) or GRD_INCONNU
+        logement = etat.logement if etat else None
         return {OPT_CODE_POSTAL: serveur.get("code_postal") or self._options.get(OPT_CODE_POSTAL, ""),
-                OPT_AMELIORER: bool(serveur.get("accord_amelioration", self._options.get(OPT_AMELIORER, False)))}
+                OPT_AMELIORER: bool(serveur.get("accord_amelioration", self._options.get(OPT_AMELIORER, False))),
+                OPT_GRD: grd if grd in GRDS else GRD_INCONNU,
+                OPT_LOGEMENT: logement["id"] if logement else ""}
+
+    def _logements_au_choix(self) -> list[dict[str, str]]:
+        """Logements proposés par le service, seulement s'il y en a plusieurs ET que le logement
+        actuel en fait partie (sinon, valider le formulaire déplacerait la source sans le vouloir)."""
+        etat = self._etat()
+        if etat is None or etat.logement is None:
+            return []
+        logements = etat.logements
+        if len(logements) < 2 or etat.logement["id"] not in {lg["id"] for lg in logements}:
+            return []
+        return logements
+
+    @staticmethod
+    def _champ_logement(logements: list[dict[str, str]]) -> SelectSelector:
+        return SelectSelector(SelectSelectorConfig(
+            options=[SelectOptionDict(value=lg["id"], label=lg["nom"]) for lg in logements],
+            mode=SelectSelectorMode.DROPDOWN))
 
     async def async_step_envoi(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Envoi direct vers analyse.sbg-energy.com : désactivé par défaut."""
         connecte = bool(self.config_entry.data.get(DATA_JETON))
+        etat = self._etat()
+        effacee = bool(etat and etat.effacee)
         erreurs: dict[str, str] = {}
         message = ""
         connus = self._reglages_connus()
+        logements = self._logements_au_choix() if connecte else []
+        if user_input is None and effacee:
+            erreurs["base"] = "installation_effacee"      # dit dans les options, pas seulement en notification
         if user_input is not None:
             pas = int(user_input.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))
             cp = str(user_input.get(OPT_CODE_POSTAL) or "").strip()
             accord = bool(user_input.get(OPT_AMELIORER))
             actif = bool(user_input.get(OPT_ENVOI))
+            grd = str(user_input.get(OPT_GRD) or GRD_INCONNU)
+            grd = grd if grd in GRDS else GRD_INCONNU
+            voulu = str(user_input.get(OPT_LOGEMENT) or "") if logements else ""
+            logement = voulu if voulu and voulu != connus[OPT_LOGEMENT] else None
             if pas == 5 and not self._options.get(OPT_CINQ_MINUTES):
                 erreurs[OPT_PAS_ENVOI] = "pas_5_sans_option"
             elif (actif or cp) and not CODE_POSTAL.match(cp):
@@ -305,6 +349,7 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
                 self._options[OPT_PAS_ENVOI] = pas
                 self._options[OPT_CODE_POSTAL] = cp
                 self._options[OPT_AMELIORER] = accord
+                self._options[OPT_GRD] = grd
                 if connecte and user_input.get(OPT_DECONNECTER):
                     await envoi.async_revoquer(self.hass, self.config_entry.data[DATA_JETON])
                     self.hass.config_entries.async_update_entry(
@@ -313,32 +358,47 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
                     return self.async_create_entry(data=self._options)
                 if actif and not connecte:
                     return await self.async_step_connexion()
-                if connecte and cp and (cp, accord) != (connus[OPT_CODE_POSTAL], connus[OPT_AMELIORER]):
+                change = (cp, accord, grd) != (connus[OPT_CODE_POSTAL], connus[OPT_AMELIORER], connus[OPT_GRD])
+                # installation effacée puis recochée : on redemande au service (autorisée à nouveau ?)
+                if connecte and cp and (change or logement or (actif and effacee)):
                     # un appel, au moment où l'utilisateur enregistre (retirer l'accord efface les copies)
                     try:
-                        await envoi.async_reglages(self.hass, self.config_entry, cp, accord)
+                        await envoi.async_reglages(self.hass, self.config_entry, cp, accord, grd, logement)
                     except envoi.EnvoiErreur as e:
-                        erreurs["base"] = "reglages_refuses"
+                        erreurs["base"] = "installation_effacee" if e.code == envoi.EFFACEE else "reglages_refuses"
                         message = e.message
+                        if e.code == envoi.EFFACEE:
+                            self._options[OPT_ENVOI] = False
                 if not erreurs:
                     return self.async_create_entry(data=self._options)
         pas_permis = ["5", "15", "60"] if self._options.get(OPT_CINQ_MINUTES) else ["15", "60"]
         saisie = user_input or {}
+        envoi_coche = bool(saisie.get(OPT_ENVOI, self._options.get(OPT_ENVOI, False)))
+        if erreurs.get("base") == "installation_effacee":
+            envoi_coche = False
         schema: dict[Any, Any] = {
-            vol.Required(OPT_ENVOI, default=bool(saisie.get(OPT_ENVOI, self._options.get(OPT_ENVOI, False)))):
-                BooleanSelector(),
+            vol.Required(OPT_ENVOI, default=envoi_coche): BooleanSelector(),
             vol.Optional(OPT_CODE_POSTAL, default=str(saisie.get(OPT_CODE_POSTAL, connus[OPT_CODE_POSTAL]) or "")):
                 TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+            vol.Optional(OPT_GRD, default=str(saisie.get(OPT_GRD, connus[OPT_GRD]))):
+                SelectSelector(SelectSelectorConfig(options=[GRD_INCONNU, *GRDS], translation_key="grd",
+                                                    mode=SelectSelectorMode.DROPDOWN)),
             vol.Required(OPT_AMELIORER, default=bool(saisie.get(OPT_AMELIORER, connus[OPT_AMELIORER]))):
                 BooleanSelector(),
-            vol.Required(OPT_PAS_ENVOI, default=str(self._options.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))):
-                SelectSelector(SelectSelectorConfig(options=pas_permis, translation_key="pas_envoi",
-                                                    mode=SelectSelectorMode.LIST)),
         }
+        if logements:
+            schema[vol.Required(OPT_LOGEMENT, default=str(saisie.get(OPT_LOGEMENT, connus[OPT_LOGEMENT])))] = \
+                self._champ_logement(logements)
+        schema[vol.Required(OPT_PAS_ENVOI, default=str(self._options.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT)))] = \
+            SelectSelector(SelectSelectorConfig(options=pas_permis, translation_key="pas_envoi",
+                                                mode=SelectSelectorMode.LIST))
         if connecte:
             schema[vol.Required(OPT_DECONNECTER, default=False)] = BooleanSelector()
+        logement_actuel = etat.logement if etat and connecte else None
         return self.async_show_form(step_id="envoi", data_schema=vol.Schema(schema), errors=erreurs,
                                     description_placeholders={"compte": "connecté" if connecte else "non connecté",
+                                                              "logement": logement_actuel["nom"] if logement_actuel
+                                                              else "—",
                                                               "message": message,
                                                               "conditions": URL_CONDITIONS})
 
@@ -369,7 +429,7 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
         self.hass.config_entries.async_update_entry(self.config_entry, data=donnees)
         try:
             await envoi.async_reglages(self.hass, self.config_entry, self._options.get(OPT_CODE_POSTAL, ""),
-                                       bool(self._options.get(OPT_AMELIORER)))
+                                       bool(self._options.get(OPT_AMELIORER)), str(self._options.get(OPT_GRD) or ""))
         except envoi.EnvoiErreur as e:
             if e.code in ("reseau", "auth"):
                 # service injoignable : la connexion est gardée, les réglages repartiront au premier envoi
@@ -380,7 +440,36 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data={k: v for k, v in self.config_entry.data.items() if k != DATA_JETON})
             return self.async_abort(reason="reglages_refuses", description_placeholders={"message": e.message})
-        return self.async_create_entry(data=self._options)
+        return await self.async_step_logement()
+
+    async def async_step_logement(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Après la connexion (0.6.0) : le logement du compte où arrivent les données, et le choix
+        d'un autre si le service donne la liste. Service sans ces champs : rien à montrer (0.5)."""
+        etat = self._etat()
+        actuel = etat.logement if etat else None
+        if actuel is None:
+            return self.async_create_entry(data=self._options)
+        logements = self._logements_au_choix()
+        erreurs: dict[str, str] = {}
+        message = ""
+        if user_input is not None:
+            voulu = str(user_input.get(OPT_LOGEMENT) or "") if logements else ""
+            if not voulu or voulu == actuel["id"]:
+                return self.async_create_entry(data=self._options)
+            try:
+                await envoi.async_reglages(self.hass, self.config_entry, self._options.get(OPT_CODE_POSTAL, ""),
+                                           bool(self._options.get(OPT_AMELIORER)),
+                                           str(self._options.get(OPT_GRD) or ""), voulu)
+            except envoi.EnvoiErreur as e:
+                erreurs["base"] = "reglages_refuses"
+                message = e.message
+            else:
+                return self.async_create_entry(data=self._options)
+        schema: dict[Any, Any] = {}
+        if logements:
+            schema[vol.Required(OPT_LOGEMENT, default=actuel["id"])] = self._champ_logement(logements)
+        return self.async_show_form(step_id="logement", data_schema=vol.Schema(schema), errors=erreurs,
+                                    description_placeholders={"logement": actuel["nom"], "message": message})
 
     async def async_step_echec(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Connexion refusée ou expirée : rien n'est activé."""
