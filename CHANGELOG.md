@@ -3,6 +3,30 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; versions : [SemVer](https://semver.org/lang/fr/).
 Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_SBG_HA_EXPORT.md`).
 
+## [0.6.0] — votre logement
+
+- Étape **Envoi** (fr, en, nl, de) : les données envoyées sont une source de **votre logement** et
+  servent au **rapport de votre logement** ; même phrase de conservation que le service d'analyse
+  (fichiers bruts 90 jours ; avec un compte, mesures du logement 3 ans, puis supprimées ; tout
+  supprimable à tout moment) ; trois logements et trois installations au plus par compte, une
+  seule par logement. L'information des occupants reste, en paragraphe à part.
+- **Gestionnaire de réseau** (ORES, RESA, AIEG, AIESH, REW, Sibelga, Fluvius), champ **facultatif**
+  de l'étape Envoi, « Je ne sais pas » par défaut. Il part avec les réglages seulement s'il est
+  choisi ; sinon le service garde celui qu'il connaît ou le déduit du code postal quand il est
+  certain. L'intégration ne le pré-remplit pas : une déduction faite ici passerait pour une
+  déclaration.
+- **Logement** : après la connexion du compte, une étape dit à quel logement les données arrivent
+  et, si le compte en a plusieurs, laisse en choisir un autre (liste déroulante, aussi dans
+  l'étape Envoi ensuite). Seulement si le service donne ces informations (champs facultatifs
+  `logement` et `logements` de sa réponse) ; sinon, rien ne change : le service range par code
+  postal, comme avec 0.5.
+- **Installation effacée** depuis le compte (réponse `installation_effacee`) : l'envoi est coupé,
+  une notification persistante et l'étape Envoi le disent, et l'intégration ne réessaie plus
+  chaque jour. Le recocher, après avoir autorisé l'installation à nouveau depuis le compte, le
+  reprend.
+- L'envoi direct reste en **version 1** du format (le service ne range que des jours complets au
+  pas de la session) ; la version 2 compacte reste réservée à l'export manuel.
+
 ## [0.5.1] — logo visible dans HACS
 
 - README (fr, en) : le logo est donné par une adresse absolue ; HACS n'affichait que le texte
