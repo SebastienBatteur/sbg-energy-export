@@ -23,6 +23,15 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
   une notification persistante et l'étape Envoi le disent, et l'intégration ne réessaie plus
   chaque jour. Le recocher, après avoir autorisé l'installation à nouveau depuis le compte, le
   reprend.
+- **Installation déconnectée** depuis le compte (réponse `installation_deconnectee`) : l'intégration
+  réessaie chaque jour, comme avant, mais ne le dit qu'**une fois** (notification dédiée, retirée
+  dès que le service accepte de nouveau l'installation ou que l'envoi est désactivé), au lieu d'un
+  « Rien n'a été envoyé » chaque matin.
+- Les réglages envoyés au service nomment le **texte accepté** (`texte_consentement`), pour la
+  preuve qu'il garde.
+- **Exporter** : tant que l'envoi automatique n'est pas actif, la notification de l'export rappelle,
+  dans la langue de Home Assistant, qu'il évite de déposer le fichier à la main chaque mois.
+- README fr/en : lien vers la présentation et le mode d'emploi sur sbg-energy.com.
 - L'envoi direct reste en **version 1** du format (le service ne range que des jours complets au
   pas de la session) ; la version 2 compacte reste réservée à l'export manuel.
 

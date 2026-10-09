@@ -4,6 +4,8 @@
 
 *[Version française](README.md)*
 
+Overview and how-to: https://sbg-energy.com/donnees-compteur/#home-assistant
+
 Exports the data of the Home Assistant **Energy dashboard** to the open **"SBG HA export"**
 format ([specification, in French](docs/FORMAT_SBG_HA_EXPORT.md)), so that you can upload it
 yourself to an analysis service such as analyse.sbg-energy.com.

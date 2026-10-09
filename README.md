@@ -4,6 +4,8 @@
 
 *[English version](README.en.md)*
 
+Présentation et mode d'emploi : https://sbg-energy.com/donnees-compteur/#home-assistant
+
 Exporte les données du **tableau de bord Énergie** de Home Assistant au format ouvert
 **« SBG HA export »** ([spécification](docs/FORMAT_SBG_HA_EXPORT.md)), pour les déposer vous-même
 sur un service d'analyse comme analyse.sbg-energy.com.
