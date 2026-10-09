@@ -143,9 +143,9 @@ Ce que le service en fait : **le rapport de votre logement**, mis à jour à cha
 **alerte « meilleure offre »** par e-mail (sans aucune donnée de consommation) quand une offre
 analysée est moins chère que votre contrat d'au moins 40 € et 5 % par an, deux mois de suite.
 Le pas de 5 minutes y est gardé **12 mois** (pour comprendre les comportements), puis regroupé au
-quart d'heure (pour suivre leur évolution). Vos fichiers bruts sont supprimés après 90 jours.
-Avec un compte, les mesures de votre logement sont gardées **3 ans** pour tenir votre rapport à
-jour, puis supprimées. Vous pouvez tout supprimer à tout moment. **Gratuit pendant la bêta.**
+quart d'heure (pour suivre leur évolution) ; tout est supprimé après **3 ans glissants**,
+effaçable depuis votre compte, effacé si vous supprimez votre compte. **Gratuit pendant la
+bêta.**
 
 **Améliorer les outils SBG** (case facultative, **décochée par défaut**, la même que sur le
 formulaire de dépôt : « J'accepte que SBG garde mes données de consommation, pseudonymisées, pour

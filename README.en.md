@@ -127,9 +127,8 @@ What is sent, and when:
 What the service does with it: **the report of your home**, updated at each send, and a
 **"better offer" e-mail alert** (no consumption data in it). The 5-minute step is kept **12
 months** there (to understand behaviours), then grouped into quarter-hours (to follow their
-evolution). Your raw files are deleted after 90 days. With an account, your home's measurements are
-kept **3 years** to keep your report up to date, then deleted. You can delete everything at any
-time. **Free during the beta.**
+evolution); everything is deleted after **3 rolling years**, erasable from your account, erased if
+you delete your account. **Free during the beta.**
 
 **Improve SBG tools** (optional tick box, **unticked by default**, the same as on the upload form:
 "I agree that SBG keeps my consumption data, pseudonymised, to improve its tools (simulator, SBG
