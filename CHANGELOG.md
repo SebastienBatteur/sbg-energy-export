@@ -6,10 +6,9 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
 ## [0.6.0] — votre logement
 
 - Étape **Envoi** (fr, en, nl, de) : les données envoyées sont une source de **votre logement** et
-  servent au **rapport de votre logement** ; même phrase de conservation que le service d'analyse
-  (fichiers bruts 90 jours ; avec un compte, mesures du logement 3 ans, puis supprimées ; tout
-  supprimable à tout moment) ; trois logements et trois installations au plus par compte, une
-  seule par logement. L'information des occupants reste, en paragraphe à part.
+  servent au **rapport de votre logement** ; trois logements et trois installations au plus par
+  compte, une seule par logement. La phrase de conservation reste celle de 0.5.1 (« tout supprimé
+  après 3 ans glissants ») : la nouvelle phrase du service viendra avec son étape suivante. L'information des occupants reste, en paragraphe à part.
 - **Gestionnaire de réseau** (ORES, RESA, AIEG, AIESH, REW, Sibelga, Fluvius), champ **facultatif**
   de l'étape Envoi, « Je ne sais pas » par défaut. Il part avec les réglages seulement s'il est
   choisi ; sinon le service garde celui qu'il connaît ou le déduit du code postal quand il est
