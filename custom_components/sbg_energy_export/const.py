@@ -55,6 +55,15 @@ OPT_GRD: Final = "grd"
 OPT_LOGEMENT: Final = "logement"
 GRD_INCONNU: Final = "inconnu"
 GRDS: Final = ("ores", "resa", "aieg", "aiesh", "rew", "sibelga", "fluvius")
+# Texte de l'étape Envoi accepté par l'utilisateur, nommé dans chaque requête de réglages (champ
+# ``texte_consentement``) pour que le service garde comme preuve le texte réellement affiché
+# (décision du 09/10/2026 : un champ explicite, pas la version lue dans le User-Agent).
+# Ce n'est NI ``ENVOI_HA`` (0.5 : « le rapport de votre compte », 3 installations) NI
+# ``ENVOI_HA_LOGEMENT`` (qui contient CONSERVATION_LOGEMENT, pas encore publiée) : c'est le texte
+# « votre logement » avec la phrase de conservation de 0.5.1 (« tout supprimé après 3 ans
+# glissants »). Quand l'étape 5 du service publiera CONSERVATION_LOGEMENT, l'intégration
+# l'affichera et enverra ``ENVOI_HA_LOGEMENT``. Changer cette valeur avec le texte affiché.
+TEXTE_CONSENTEMENT: Final = "ENVOI_HA_LOGEMENT_AVANT_ETAPE_5"
 PAS_ENVOI_DEFAUT: Final = 15
 DATA_JETON: Final = "jeton_rafraichissement"   # jeton de rafraîchissement (jamais journalisé)
 DATA_SOURCE: Final = "source"                   # identifiant ALÉATOIRE de cette installation

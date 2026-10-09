@@ -25,7 +25,15 @@ from pytest_homeassistant_custom_component.components.recorder.common import asy
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker, AiohttpClientMockResponse
 
 from custom_components.sbg_energy_export import envoi
-from custom_components.sbg_energy_export.const import API_URL, AUTH_URL, DATA_JETON, DATA_SOURCE, DOMAIN, URL_CONDITIONS
+from custom_components.sbg_energy_export.const import (
+    API_URL,
+    AUTH_URL,
+    DATA_JETON,
+    DATA_SOURCE,
+    DOMAIN,
+    TEXTE_CONSENTEMENT,
+    URL_CONDITIONS,
+)
 
 from .test_init import PAR_HEURE, PREFS, faux_5min
 
@@ -67,6 +75,8 @@ class Serveur:
         self.refus_reglages: tuple[str, str] | None = None
         self.statut_refus = 403
         self.refus_synchros: tuple[str, str] | None = None
+        self.refus_jours: tuple[str, str] | None = None     # 403 de GET jours (installation déconnectée)
+        self.textes: list[str | None] = []                   # champ « texte_consentement » de chaque réglage
         # 0.6.0 : champs facultatifs de la réponse ; None = service qui ne les connaît pas (0.5)
         self.logements: list[dict] | None = None
         self.logement: dict | None = None
@@ -106,6 +116,8 @@ class Serveur:
     async def api(self, method, url, data):
         chemin = url.path.split("/api/v1/ha/")[1]
         if chemin == "jours":
+            if self.refus_jours:
+                return self.r(method, url, 403, code=self.refus_jours[0], message=self.refus_jours[1])
             plages = [[j, j] for j in sorted(self.jours)]
             return self.r(method, url, couverture={"15": plages, "5": plages} if plages else {},
                           synchro={"permise": self.permise, "prochaine": "2026-02-02" if not self.permise else "2026-01-06",
@@ -115,7 +127,10 @@ class Serveur:
                           reglages={"code_postal": self.reglages.get("code_postal", ""),
                                     "accord_amelioration": self.reglages.get("accord_amelioration", False)})
         if chemin == "reglages":
-            d = data if isinstance(data, dict) else json.loads(data)
+            d = dict(data if isinstance(data, dict) else json.loads(data))
+            # 0.6.0 : chaque réglage nomme le texte affiché ; gardé à part pour que les comparaisons
+            # des autres champs restent lisibles (test_texte_consentement_dans_chaque_reglage)
+            self.textes.append(d.pop("texte_consentement", None))
             self.appels_reglages.append(d)
             if self.refus_reglages:
                 return self.r(method, url, self.statut_refus, code=self.refus_reglages[0],
@@ -167,10 +182,12 @@ class Serveur:
 
 
 @pytest.fixture
-def serveur(aioclient_mock: AiohttpClientMocker) -> Serveur:
+def serveur(aioclient_mock: AiohttpClientMocker):
     s = Serveur()
     s.brancher(aioclient_mock)
-    return s
+    yield s
+    # 0.6.0 : chaque requête de réglages, dans chaque test, nomme le texte réellement affiché
+    assert all(t == TEXTE_CONSENTEMENT for t in s.textes), s.textes
 
 
 async def _installer(hass: HomeAssistant, freezer: FrozenDateTimeFactory, tmp_path, options, data) -> MockConfigEntry:

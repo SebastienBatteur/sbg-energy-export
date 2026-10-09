@@ -164,6 +164,10 @@ async def async_setup_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> bool
     etat = envoi.Etat(hass)
     await etat.async_charger()
     entree.runtime_data = Donnees(collecteur, dossier, etat, dict(entree.options))
+    if not envoi.actif(entree):
+        # envoi décoché ou compte déconnecté (les options rechargent l'entrée) : plus d'essai, donc
+        # plus de raison d'afficher « installation déconnectée »
+        await envoi.async_oublier_deconnectee(hass, entree)
     entree.async_on_unload(collecteur.async_arreter)
     entree.async_on_unload(entree.add_update_listener(_async_options_modifiees))
     entree.async_create_background_task(hass, collecteur.async_rattraper(), f"{DOMAIN}_rattrapage")
