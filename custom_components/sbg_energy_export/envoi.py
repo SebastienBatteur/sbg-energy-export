@@ -40,6 +40,15 @@ coché « Envoyer à analyse.sbg-energy.com » ET connecté son compte SBG Energ
   installation depuis son compte, le service refuse tout (``installation_effacee``).
   L'intégration coupe alors l'envoi, le dit (notification persistante, et dans les options)
   et ne réessaie plus : sans cela, la tâche quotidienne redemanderait chaque jour.
+* **Installation déconnectée** (0.6.0, décision du 09/10/2026) : « arrêtée » depuis le compte,
+  elle est refusée (403 ``installation_deconnectee``) mais peut être reprise d'un clic dans le
+  compte. L'intégration continue donc d'essayer chaque jour, mais ne le dit qu'UNE fois
+  (notification persistante dédiée), au lieu d'un « Rien n'a été envoyé » chaque matin. La
+  notification part dès que le service accepte de nouveau l'installation, ou que l'envoi est
+  désactivé.
+* **Texte accepté** (0.6.0) : chaque requête de réglages nomme le texte de l'étape Envoi
+  réellement affiché (``texte_consentement``, voir ``const.TEXTE_CONSENTEMENT``), pour la
+  preuve gardée par le service.
 """
 from __future__ import annotations
 
@@ -77,6 +86,7 @@ from .const import (
     PAS_ENVOI_DEFAUT,
     PORTEES,
     RENOUVELER_JETON_J,
+    TEXTE_CONSENTEMENT,
     VERSION,
 )
 from .export import async_premier_jour, async_texte
@@ -93,6 +103,8 @@ URL_REVOCATION = f"{AUTH_URL}/protocol/openid-connect/revoke"
 AGENT = f"sbg-energy-export/{VERSION} (Home Assistant)"
 EFFACEE = "installation_effacee"   # code d'erreur du service : données de l'installation effacées
 NOTIF_EFFACEE = f"{DOMAIN}_installation_effacee"
+DECONNECTEE = "installation_deconnectee"   # 403 du service : installation « arrêtée » depuis le compte
+NOTIF_DECONNECTEE = f"{DOMAIN}_installation_deconnectee"
 
 
 class EnvoiErreur(HomeAssistantError):
@@ -213,6 +225,11 @@ class Etat:
     def effacee(self) -> bool:
         """Le service a répondu ``installation_effacee`` : l'envoi a été coupé ici."""
         return bool(self.donnees.get("effacee"))
+
+    @property
+    def deconnectee(self) -> bool:
+        """Le service a répondu ``installation_deconnectee`` et la notification a été faite."""
+        return bool(self.donnees.get("deconnectee"))
 
     @property
     def logement(self) -> dict[str, str] | None:
@@ -359,7 +376,7 @@ async def async_reglages(hass: HomeAssistant, entree: ConfigEntry, code_postal: 
     une déduction faite ici passerait, chez le service, pour une déclaration du client."""
     etat: Etat = entree.runtime_data.etat
     corps: dict[str, Any] = {"source": entree.data.get(DATA_SOURCE), "code_postal": code_postal,
-                             "accord_amelioration": bool(accord)}
+                             "accord_amelioration": bool(accord), "texte_consentement": TEXTE_CONSENTEMENT}
     if grd in GRDS:
         corps[OPT_GRD] = grd
     if logement:
@@ -372,7 +389,39 @@ async def async_reglages(hass: HomeAssistant, entree: ConfigEntry, code_postal: 
         raise
     await etat.async_noter(reglages=r.get("reglages"), effacee=False, **logements_de(r))
     persistent_notification.async_dismiss(hass, NOTIF_EFFACEE)
+    await async_oublier_deconnectee(hass, entree)
     return r
+
+
+async def async_signaler_deconnectee(hass: HomeAssistant, entree: ConfigEntry, e: EnvoiErreur) -> None:
+    """Installation « arrêtée » depuis le compte : le dire UNE fois, sans couper l'envoi.
+
+    Contrairement à ``installation_effacee``, rien n'est perdu côté service et le titulaire peut la
+    reprendre d'un clic : la tâche quotidienne continue donc d'essayer (un appel ``jours`` par jour,
+    sans données). Seule la notification est unique : elle n'est refaite qu'après avoir été retirée
+    par le retour à la normale (``async_oublier_deconnectee``)."""
+    etat: Etat = entree.runtime_data.etat
+    if etat.deconnectee:
+        _LOGGER.debug("Envoi SBG Energy : installation toujours déconnectée depuis le compte")
+        return
+    _LOGGER.warning("Envoi SBG Energy refusé : %s", e.message)
+    await etat.async_noter(deconnectee=True)
+    persistent_notification.async_create(
+        hass,
+        f"{e.message}\n\nHome Assistant réessaiera chaque jour, sans données, et ne vous le redira pas : "
+        "l'envoi reprendra seul dès que vous aurez repris cette installation depuis votre compte SBG Energy. "
+        "Pour ne plus essayer, décochez « Envoyer à analyse.sbg-energy.com » dans les options de "
+        "l'intégration. Les mesures gardées dans Home Assistant ne sont pas touchées.",
+        title="SBG Energy Export : installation déconnectée", notification_id=NOTIF_DECONNECTEE)
+
+
+async def async_oublier_deconnectee(hass: HomeAssistant, entree: ConfigEntry) -> None:
+    """Le service accepte de nouveau l'installation, ou l'envoi est désactivé : la notification
+    « déconnectée » n'a plus lieu d'être (et pourra être refaite si le refus revient)."""
+    etat: Etat = entree.runtime_data.etat
+    if etat.deconnectee:
+        await etat.async_noter(deconnectee=False)
+    persistent_notification.async_dismiss(hass, NOTIF_DECONNECTEE)
 
 
 async def async_couper_effacee(hass: HomeAssistant, entree: ConfigEntry, e: EnvoiErreur) -> None:
@@ -440,6 +489,8 @@ async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode:
     pas = int(entree.options.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))
     client = Client(hass, entree, etat)
     j = await client.async_requete("GET", "jours", params={"source": source, "pas": str(pas)})
+    # le service répond de nouveau : l'installation n'est plus (ou n'a jamais été) déconnectée
+    await async_oublier_deconnectee(hass, entree)
     serveur = j.get("reglages") or {}
     await etat.async_noter(reglages=serveur, **logements_de(j))
     cp = str(entree.options.get(OPT_CODE_POSTAL) or "")
@@ -527,7 +578,9 @@ async def async_synchroniser(hass: HomeAssistant, entree: ConfigEntry, manuel: b
     try:
         bilan = await _session(hass, entree, "complement", None, manuel)
     except EnvoiErreur as e:
-        if e.code != EFFACEE:                     # déjà dit par sa propre notification
+        if e.code == DECONNECTEE:                 # dit une seule fois, par sa propre notification
+            await async_signaler_deconnectee(hass, entree, e)
+        elif e.code != EFFACEE:                   # déjà dit par sa propre notification
             _LOGGER.warning("Envoi SBG Energy non fait : %s", e.message)
             _notifier(hass, f"Rien n'a été envoyé : {e.message}")
         raise
@@ -544,7 +597,9 @@ async def async_reimporter(hass: HomeAssistant, entree: ConfigEntry, debut: date
     try:
         bilan = await _session(hass, entree, "remplacement", (debut, fin), True)
     except EnvoiErreur as e:
-        if e.code != EFFACEE:
+        if e.code == DECONNECTEE:
+            await async_signaler_deconnectee(hass, entree, e)
+        elif e.code != EFFACEE:
             _LOGGER.warning("Réimport SBG Energy non fait : %s", e.message)
             _notifier(hass, f"Réimport non fait : {e.message}")
         raise
