@@ -157,6 +157,31 @@ async def test_bouton_et_telechargement(installe, hass: HomeAssistant, hass_clie
     assert (await connecte.get("/api/sbg_energy_export/fichier/sbg_ha_export_20990101-000000_60min.csv")).status == 404
 
 
+@pytest.mark.parametrize(("langue_ha", "debut"), [
+    ("fr", "Pour ne plus déposer ce fichier à la main chaque mois"),
+    ("en", "To stop uploading this file by hand every month"),
+    ("nl", "Wilt u dit bestand niet meer elke maand"),
+    ("de", "Damit Sie diese Datei nicht mehr jeden Monat"),
+    ("es", "To stop uploading this file by hand every month"),     # autre langue : anglais
+])
+async def test_export_rappelle_l_envoi_automatique(installe, hass: HomeAssistant, langue_ha: str,
+                                                   debut: str) -> None:
+    """ADR-040 § 5.4 : sous l'export manuel, une phrase rappelle que l'envoi automatique évite le
+    dépôt mensuel, dans la langue de Home Assistant ; seulement tant que l'envoi n'est pas actif."""
+    from custom_components.sbg_energy_export import RAPPEL_ENVOI
+
+    hass.config.language = langue_ha
+    with (patch("custom_components.sbg_energy_export.collecteur.statistics_during_period", faux_5min),
+          patch("custom_components.sbg_energy_export.persistent_notification.async_create") as notifier):
+        await hass.services.async_call("button", "press",
+                                       {"entity_id": "button.sbg_energy_export_export_hourly"}, blocking=True)
+        assert debut in notifier.call_args.args[1]
+        # envoi actif (coché et compte connecté) : plus de rappel
+        with patch("custom_components.sbg_energy_export.envoi.actif", return_value=True):
+            await hass.services.async_call(DOMAIN, "exporter", {"pas": 60}, blocking=True, return_response=True)
+        assert not any(t in notifier.call_args.args[1] for t in RAPPEL_ENVOI.values())
+
+
 async def test_dechargement(installe, hass: HomeAssistant) -> None:
     collecteur = installe.runtime_data.collecteur
     assert collecteur._arret is not None

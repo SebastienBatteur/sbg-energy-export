@@ -32,6 +32,7 @@ from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
 from . import envoi
+from .categories import langue
 from .collecteur import Collecteur
 from .const import (
     ATTR_DEBUT,
@@ -134,6 +135,23 @@ def lien_telechargement(lien: str) -> str:
     return f'<a href="{html.escape(lien, quote=True)}" target="_blank">Télécharger</a>'
 
 
+# ADR-040 § 5.4 (décision du 09/10/2026) : sous l'export manuel, rappeler que l'envoi automatique
+# évite le dépôt mensuel. Une phrase, dans la langue de Home Assistant, et seulement tant que
+# l'envoi n'est pas actif (une entité bouton n'a pas de description : la notification qui suit
+# l'appui est le seul texte que Home Assistant affiche à ce moment).
+RAPPEL_ENVOI: dict[str, str] = {
+    "fr": "Pour ne plus déposer ce fichier à la main chaque mois : activez l'envoi automatique à "
+          "analyse.sbg-energy.com dans les options de l'intégration (étape Envoi, désactivé par défaut).",
+    "en": "To stop uploading this file by hand every month: turn on automatic sending to "
+          "analyse.sbg-energy.com in the integration options (Send step, off by default).",
+    "nl": "Wilt u dit bestand niet meer elke maand handmatig uploaden? Schakel het automatisch verzenden "
+          "naar analyse.sbg-energy.com in via de opties van de integratie (stap Verzenden, standaard uit).",
+    "de": "Damit Sie diese Datei nicht mehr jeden Monat von Hand hochladen müssen: Aktivieren Sie das "
+          "automatische Senden an analyse.sbg-energy.com in den Optionen der Integration (Schritt Senden, "
+          "standardmäßig aus).",
+}
+
+
 async def async_exporter_et_notifier(
     hass: HomeAssistant, entree: SbgConfigEntry, pas: int, debut=None, fin=None
 ) -> Resultat:
@@ -149,7 +167,8 @@ async def async_exporter_et_notifier(
          "clic droit sur le lien → « Ouvrir dans un nouvel onglet »).\n\n"
          "C'est une archive ZIP : déposez-la telle quelle sur analyse.sbg-energy.com. "
          "Elle reste aussi dans le dossier `sbg_energy_export/exports` de la configuration. "
-         "Rien n'a été envoyé."),
+         "Rien n'a été envoyé.")
+        + ("" if envoi.actif(entree) else "\n\n" + RAPPEL_ENVOI[langue(hass.config.language)]),
         title="SBG Energy Export",
         notification_id=f"{DOMAIN}_export",
     )
