@@ -3,6 +3,31 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; versions : [SemVer](https://semver.org/lang/fr/).
 Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_SBG_HA_EXPORT.md`).
 
+## [0.6.1] — l'envoi et l'accord ne se retirent plus sans confirmation
+
+- Corrigé : l'étape **Envoi** pouvait **couper l'envoi automatique et retirer l'accord « Améliorer
+  les outils SBG »** sans que l'utilisateur l'ait voulu. Constaté sur une installation réelle juste
+  après la mise à jour 0.5.1 → 0.6.0 (compte connecté, envoi actif, accord donné) : après le seul
+  choix du gestionnaire de réseau, l'étape a été validée avec les deux interrupteurs décochés ;
+  0.6.0 l'a pris tel quel, a retiré l'accord chez le service (qui efface alors les copies
+  pseudonymisées) et a coupé l'envoi. L'intégration ne s'en remet plus aux seuls interrupteurs
+  reçus :
+  - un interrupteur reçu **décoché alors que l'étape le montrait coché** ouvre une étape
+    **Confirmer** (fr, en, nl, de), une case par effet (« Désactiver l'envoi », « Retirer mon
+    accord »), **décochées par défaut**. Ce qui n'est pas confirmé reste comme avant ; le reste de
+    l'étape (code postal, gestionnaire de réseau, logement, pas) est enregistré. Rien ne part au
+    service avant cette confirmation ;
+  - la comparaison se fait avec ce que l'étape **montrait à son ouverture**, plus avec l'état relu
+    au moment de valider : un accord donné entre-temps depuis le compte n'est plus retiré par un
+    formulaire où la case, montrée décochée, n'a pas été touchée ;
+  - un interrupteur absent de la saisie vaut ce qui était montré, jamais « décoché ».
+  « Déconnecter mon compte SBG Energy » reste un geste direct, sans confirmation de plus (aucun
+  réglage ne part alors au service).
+- **Si 0.6.0 a décoché vos interrupteurs** : ouvrez Configurer → étape Envoi, recochez « Envoyer à
+  analyse.sbg-energy.com » et, si vous l'aviez donné, « Améliorer les outils SBG », puis validez.
+  L'envoi reprend à la prochaine échéance mensuelle (ou par le bouton « Envoyer maintenant ») ; les
+  mesures gardées dans Home Assistant et les jours déjà reçus par le service n'ont pas été touchés.
+
 ## [0.6.0] — votre logement
 
 - Étape **Envoi** (fr, en, nl, de) : les données envoyées sont une source de **votre logement** et
