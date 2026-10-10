@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 DOMAIN: Final = "sbg_energy_export"
-VERSION: Final = "0.6.1"
+VERSION: Final = "0.6.2"
 
 # Dossier de travail, dans le dossier de configuration de Home Assistant.
 DOSSIER: Final = "sbg_energy_export"

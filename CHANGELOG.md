@@ -3,6 +3,24 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; versions : [SemVer](https://semver.org/lang/fr/).
 Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_SBG_HA_EXPORT.md`).
 
+## [0.6.2] — le recorder indisponible ne laisse plus d'erreur perdue
+
+- Corrigé : une erreur du recorder pendant l'enregistrement des mesures fines (toutes les
+  15 minutes, et au chargement de l'intégration) restait dans une tâche de fond que personne ne
+  lisait. Elle ne ressortait dans le journal que plus tard (au passage suivant), sous la forme
+  « Task exception was never retrieved », sans dire ce qu'il advenait des mesures. Elle est maintenant
+  consignée tout de suite : un **avertissement** d'une ligne quand les statistiques de Home
+  Assistant sont indisponibles (base fermée ou pas prête), une erreur avec sa trace pour le reste.
+  Dans tous les cas le passage suivant reprend où le précédent s'est arrêté : aucune période
+  n'est marquée comme enregistrée sans l'avoir été, **aucune mesure n'est perdue** (comme avant).
+- Corrigé : plus aucune requête n'est envoyée au recorder quand il n'est pas en marche (base pas
+  encore prête, démarrage du recorder en échec, recorder arrêté) ; le passage est reporté au
+  suivant. Avant, la requête partait quand même (« cannot schedule new futures after shutdown »).
+- Tests : le test d'installation qui avance l'horloge laissait le minuteur du collecteur lancer
+  son passage après la fin du test, pendant la fermeture du recorder de test (échec intermittent
+  de la CI, « no such table: statistics_meta »). Il fait maintenant sonner le minuteur lui-même
+  et attend la fin du passage.
+
 ## [0.6.1] — l'envoi et l'accord ne se retirent plus sans confirmation
 
 - Corrigé : l'étape **Envoi** pouvait **couper l'envoi automatique et retirer l'accord « Améliorer
