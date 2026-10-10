@@ -118,7 +118,8 @@
       "pas_5_sans_option": "The 5-minute step needs the \"finest step: 5 minutes\" option.",
       "code_postal": "A 4-digit Belgian postcode is required to send.",
       "reglages_refuses": "The service refused: {message}",
-      "installation_effacee": "This installation's data were deleted from your SBG Energy account: sending is off and no longer retries. To resume it, first allow this installation again from your account, then tick \"Send to analyse.sbg-energy.com\"."
+      "installation_effacee": "This installation's data were deleted from your SBG Energy account: sending is off and no longer retries. To resume it, first allow this installation again from your account, then tick \"Send to analyse.sbg-energy.com\".",
+      "accord_retire": "Your \"Improve SBG tools\" consent was withdrawn from your account while this form was open: it stays withdrawn and nothing was saved. Check the settings below, tick the consent again only if you want to give it again, then submit."
     }
   },
   "selector": {
