@@ -38,6 +38,9 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
   suivie, annulée au déchargement de l'intégration et à l'arrêt de Home Assistant. Avant, un passage
   en cours à ce moment-là continuait seul et interrogeait encore le recorder déjà fermé (erreur
   « cannot schedule new futures after shutdown » dans le journal).
+- Corrigé : une installation **déconnectée puis effacée** depuis le compte ne garde plus la
+  notification « installation déconnectée » (qui promettait un nouvel essai chaque jour) quand le
+  refus arrive par l'étape Envoi : il ne reste que « envoi coupé ».
 
 ## [0.5.1] — logo visible dans HACS
 

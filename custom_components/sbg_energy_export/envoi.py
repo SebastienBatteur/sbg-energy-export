@@ -434,6 +434,9 @@ async def async_couper_effacee(hass: HomeAssistant, entree: ConfigEntry, e: Envo
     if not etat.effacee:
         _LOGGER.warning("Envoi SBG Energy coupé : %s", e.message)
     await etat.async_noter(effacee=True, logement=None, logements=[])
+    # L'entrée n'est pas rechargée (voir plus bas) : la notification « déconnectée », qui promet
+    # un nouvel essai chaque jour, doit être retirée ici, puisque plus rien ne réessaiera.
+    await async_oublier_deconnectee(hass, entree)
     persistent_notification.async_create(
         hass,
         f"{e.message}\n\n**L'envoi automatique est coupé dans Home Assistant** : il ne réessaiera plus. "

@@ -150,3 +150,26 @@ async def test_texte_affiche_sans_conservation_logement(hass: HomeAssistant) -> 
         texte = json.loads((racine / f).read_text(encoding="utf-8"))["options"]["step"]["envoi"]["description"]
         assert phrase in texte, f
         assert "90" not in texte, f            # « fichiers bruts 90 jours » : phrase de l'étape 5
+
+
+async def test_deconnectee_puis_effacee_une_seule_notification(hass: HomeAssistant, connecte, serveur: Serveur,
+                                                               freezer: FrozenDateTimeFactory) -> None:
+    """Installation arrêtée, puis effacée depuis le compte, et le refus arrive par les réglages
+    (étape Envoi) : l'envoi est coupé sans recharger l'entrée, donc la notification « déconnectée »
+    (« réessaiera chaque jour ») doit partir à ce moment-là. Par la tâche quotidienne, ``GET jours``
+    a déjà répondu avant le refus, et l'a retirée."""
+    serveur.refus_jours = DECONNECTEE
+    runtime = connecte.runtime_data
+    with patch(COLLECTEUR, faux_5min):
+        await _jours(hass, freezer, 1, 1)
+        assert NOTE in _notes(hass) and runtime.etat.deconnectee
+        serveur.refus_reglages, serveur.statut_refus = ("installation_effacee", "Données supprimées."), 409
+        r = await _options_jusqu_a_envoi(hass, connecte)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "5000"})
+        assert r["errors"] == {"base": "installation_effacee"}
+        await hass.async_block_till_done()
+    assert connecte.options["envoi_actif"] is False and connecte.runtime_data is runtime
+    assert f"{DOMAIN}_installation_effacee" in _notes(hass)
+    assert NOTE not in _notes(hass)
+    assert not runtime.etat.deconnectee
