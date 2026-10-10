@@ -235,6 +235,6 @@ async def async_remove_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> Non
     """
     if jeton := entree.data.get(DATA_JETON):
         await envoi.async_revoquer(hass, jeton)
-    await envoi.Etat(hass).async_supprimer()
-    persistent_notification.async_dismiss(hass, envoi.NOTIF_EFFACEE)
-    persistent_notification.async_dismiss(hass, envoi.NOTIF_DECONNECTEE)
+    etat = envoi.Etat(hass)
+    await envoi.async_oublier_compte(hass, etat)
+    await etat.async_supprimer()

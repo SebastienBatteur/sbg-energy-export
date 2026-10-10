@@ -355,6 +355,9 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data={k: v for k, v in self.config_entry.data.items() if k != DATA_JETON})
                     self._options[OPT_ENVOI] = False
+                    if (etat := self._etat()) is not None:
+                        # logement, « effacée », prochain envoi… : c'était ce compte-là
+                        await envoi.async_oublier_compte(self.hass, etat)
                     return self.async_create_entry(data=self._options)
                 if actif and not connecte:
                     return await self.async_step_connexion()
@@ -427,6 +430,10 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
         donnees = {**self.config_entry.data, DATA_JETON: jeton}
         donnees.setdefault(DATA_SOURCE, envoi.nouvelle_source())
         self.hass.config_entries.async_update_entry(self.config_entry, data=donnees)
+        if (etat := self._etat()) is not None:
+            # Nouveau jeton, peut-être un autre compte (ou l'ancien jeton avait expiré, sans passer
+            # par « déconnecter ») : rien de l'état précédent ne doit se montrer à l'étape suivante.
+            await envoi.async_oublier_compte(self.hass, etat)
         try:
             await envoi.async_reglages(self.hass, self.config_entry, self._options.get(OPT_CODE_POSTAL, ""),
                                        bool(self._options.get(OPT_AMELIORER)), str(self._options.get(OPT_GRD) or ""))

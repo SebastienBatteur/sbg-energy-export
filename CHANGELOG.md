@@ -44,6 +44,9 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
 - Corrigé : l'état de l'envoi (installation effacée, logement, prochain envoi permis) est lié à
   l'identifiant de l'installation et supprimé avec l'intégration : une intégration supprimée puis
   ajoutée de nouveau ne s'affiche plus « effacée » et ne reprend pas le logement de l'ancienne.
+  De même à la **déconnexion du compte** et à la connexion d'un compte : l'état gardé (logement,
+  liste des logements, réglages vus chez le service, dernier et prochain envoi) est oublié, pour
+  qu'un autre compte ne retrouve pas le logement du précédent.
 
 ## [0.5.1] — logo visible dans HACS
 
