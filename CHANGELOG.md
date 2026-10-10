@@ -34,6 +34,10 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
 - README fr/en : lien vers la présentation et le mode d'emploi sur sbg-energy.com.
 - L'envoi direct reste en **version 1** du format (le service ne range que des jours complets au
   pas de la session) ; la version 2 compacte reste réservée à l'export manuel.
+- Corrigé : le **passage du collecteur** (toutes les 15 minutes) est maintenant une tâche de fond
+  suivie, annulée au déchargement de l'intégration et à l'arrêt de Home Assistant. Avant, un passage
+  en cours à ce moment-là continuait seul et interrogeait encore le recorder déjà fermé (erreur
+  « cannot schedule new futures after shutdown » dans le journal).
 
 ## [0.5.1] — logo visible dans HACS
 
