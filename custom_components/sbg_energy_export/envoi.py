@@ -200,15 +200,33 @@ async def async_revoquer(hass: HomeAssistant, jeton: str) -> None:
 # ------------------------------------------------------------------ état local
 class Etat:
     """Dernier envoi, prochain envoi permis (donné par le service), dernier renouvellement du jeton.
-    Aucun secret ici (``.storage/sbg_energy_export.envoi``)."""
+    Aucun secret ici (``.storage/sbg_energy_export.envoi``).
+
+    Le fichier porte l'identifiant de l'installation (``source``) dont il parle : celui d'une
+    autre installation (intégration supprimée puis ajoutée de nouveau) n'est pas repris."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.envoi")
         self.donnees: dict[str, Any] = {}
         self._ecouteurs: list[Callable[[], None]] = []
 
-    async def async_charger(self) -> None:
-        self.donnees = await self._store.async_load() or {}
+    async def async_charger(self, source: str | None = None) -> None:
+        """Charge l'état de l'installation ``source``.
+
+        Un état noté pour une AUTRE installation est écarté : « effacée », logement, date du
+        prochain envoi… ne valent que pour elle. Un état sans ``source`` (écrit avant 0.6.0) est
+        celui de l'installation en place : il est gardé et prend son identifiant."""
+        donnees = await self._store.async_load() or {}
+        if source and donnees.get("source") not in (None, source):
+            donnees = {}
+        if source:
+            donnees["source"] = source
+        self.donnees = donnees
+
+    async def async_supprimer(self) -> None:
+        """Intégration supprimée : l'état de son installation ne sert plus à rien."""
+        self.donnees = {}
+        await self._store.async_remove()
 
     async def async_noter(self, **valeurs: Any) -> None:
         self.donnees.update(valeurs)

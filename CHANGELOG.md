@@ -41,6 +41,9 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
 - Corrigé : une installation **déconnectée puis effacée** depuis le compte ne garde plus la
   notification « installation déconnectée » (qui promettait un nouvel essai chaque jour) quand le
   refus arrive par l'étape Envoi : il ne reste que « envoi coupé ».
+- Corrigé : l'état de l'envoi (installation effacée, logement, prochain envoi permis) est lié à
+  l'identifiant de l'installation et supprimé avec l'intégration : une intégration supprimée puis
+  ajoutée de nouveau ne s'affiche plus « effacée » et ne reprend pas le logement de l'ancienne.
 
 ## [0.5.1] — logo visible dans HACS
 

@@ -181,7 +181,7 @@ async def async_setup_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> bool
     collecteur = Collecteur(hass, dossier, entree.options)
     await collecteur.async_demarrer()
     etat = envoi.Etat(hass)
-    await etat.async_charger()
+    await etat.async_charger(entree.data.get(DATA_SOURCE))
     entree.runtime_data = Donnees(collecteur, dossier, etat, dict(entree.options))
     if not envoi.actif(entree):
         # envoi décoché ou compte déconnecté (les options rechargent l'entrée) : plus d'essai, donc
@@ -228,6 +228,13 @@ async def async_remove_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> Non
     qu'une autorisation reste valable dans le compte SBG Energy. Les fichiers locaux
     (``<config>/sbg_energy_export/``) restent : ce sont les données de l'utilisateur, le
     README dit comment les supprimer.
+
+    L'état de l'envoi (``.storage/sbg_energy_export.envoi`` : installation effacée, logement,
+    prochain envoi permis) et ses deux notifications parlent de CETTE installation : ils partent
+    avec elle, pour qu'une intégration ajoutée de nouveau (nouvel identifiant) ne les reprenne pas.
     """
     if jeton := entree.data.get(DATA_JETON):
         await envoi.async_revoquer(hass, jeton)
+    await envoi.Etat(hass).async_supprimer()
+    persistent_notification.async_dismiss(hass, envoi.NOTIF_EFFACEE)
+    persistent_notification.async_dismiss(hass, envoi.NOTIF_DECONNECTEE)

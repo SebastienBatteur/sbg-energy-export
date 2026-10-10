@@ -247,3 +247,39 @@ async def test_autre_refus_ne_coupe_pas_l_envoi(hass: HomeAssistant, connecte, s
         await hass.services.async_call(DOMAIN, "envoyer", {}, blocking=True, return_response=True)
     assert connecte.options["envoi_actif"] is True
     assert not connecte.runtime_data.etat.effacee
+
+
+async def test_etat_de_l_envoi_supprime_avec_l_integration(hass: HomeAssistant, connecte, serveur: Serveur) -> None:
+    """Intégration supprimée alors que l'installation était effacée : une intégration ajoutée de
+    nouveau (autre identifiant) ne doit ni se dire « effacée », ni reprendre logement et dates."""
+    serveur.refus_synchros = ("installation_effacee", MESSAGE_EFFACEE)
+    with patch(COLLECTEUR, faux_5min):
+        with pytest.raises(HomeAssistantError, match="supprimées"):
+            await hass.services.async_call(DOMAIN, "envoyer", {}, blocking=True, return_response=True)
+        await connecte.runtime_data.etat.async_noter(logement={"id": "7", "nom": "Mon logement"},
+                                                     prochaine="2026-03-01")
+        assert await hass.config_entries.async_remove(connecte.entry_id)
+        await hass.async_block_till_done()
+    assert f"{DOMAIN}_installation_effacee" not in persistent_notification._async_get_or_create_notifications(hass)
+    etat = envoi.Etat(hass)
+    await etat.async_charger("f" * 32)
+    assert not etat.effacee and etat.logement is None and etat.prochaine is None
+    assert etat.donnees == {"source": "f" * 32}
+
+
+async def test_etat_de_l_envoi_lie_a_l_installation(hass: HomeAssistant) -> None:
+    """L'état noté pour une installation n'est pas repris par une autre ; celui d'avant 0.6.0
+    (sans identifiant) est celui de l'installation en place."""
+    ancien = envoi.Etat(hass)
+    await ancien.async_charger()
+    await ancien.async_noter(effacee=True, prochaine="2026-03-01")       # écrit par 0.5 : sans « source »
+    etat = envoi.Etat(hass)
+    await etat.async_charger(SOURCE)
+    assert etat.effacee and etat.donnees["source"] == SOURCE              # même installation : gardé
+    await etat.async_noter(logement={"id": "7", "nom": "Mon logement"})
+    meme = envoi.Etat(hass)
+    await meme.async_charger(SOURCE)
+    assert meme.effacee and meme.logement == {"id": "7", "nom": "Mon logement"}
+    autre = envoi.Etat(hass)
+    await autre.async_charger("f" * 32)
+    assert not autre.effacee and autre.logement is None and autre.prochaine is None
