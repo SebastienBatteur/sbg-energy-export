@@ -47,6 +47,9 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
   De même à la **déconnexion du compte** et à la connexion d'un compte : l'état gardé (logement,
   liste des logements, réglages vus chez le service, dernier et prochain envoi) est oublié, pour
   qu'un autre compte ne retrouve pas le logement du précédent.
+- **Installation effacée** : l'envoi est coupé quelle que soit la requête du service qui le dit
+  (jours, réglages, ouverture, morceau, fermeture de la session, réimport), et plus seulement à
+  l'ouverture de la session.
 
 ## [0.5.1] — logo visible dans HACS
 

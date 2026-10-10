@@ -285,6 +285,40 @@ async def test_etat_de_l_envoi_lie_a_l_installation(hass: HomeAssistant) -> None
     assert not autre.effacee and autre.logement is None and autre.prochaine is None
 
 
+@pytest.mark.parametrize("requete", ["jours", "import", "terminer"])
+async def test_installation_effacee_coupe_l_envoi_quelle_que_soit_la_requete(
+    hass: HomeAssistant, connecte, serveur: Serveur, aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory, requete: str,
+) -> None:
+    """Le service ne répond ``installation_effacee`` qu'aux réglages et à l'ouverture de session,
+    mais l'intégration n'en dépend pas : venu d'une autre requête de la session (y compris la
+    fermeture, dont l'erreur ne remonte pas), le refus coupe l'envoi de la même façon."""
+    setattr(serveur, f"refus_{requete}", ("installation_effacee", MESSAGE_EFFACEE))
+    with patch(COLLECTEUR, faux_5min):
+        if requete == "terminer":      # l'erreur de fermeture ne remonte pas : les jours sont arrivés
+            await hass.services.async_call(DOMAIN, "envoyer", {}, blocking=True, return_response=True)
+        else:
+            with pytest.raises(HomeAssistantError, match="supprimées"):
+                await hass.services.async_call(DOMAIN, "envoyer", {}, blocking=True, return_response=True)
+        await hass.async_block_till_done()
+        assert connecte.options["envoi_actif"] is False
+        assert connecte.runtime_data.etat.effacee
+        assert f"{DOMAIN}_installation_effacee" in persistent_notification._async_get_or_create_notifications(hass)
+        n = len(_appels_api(aioclient_mock))
+        await _jours_passent(hass, freezer, 40, SOURCE)
+        assert len(_appels_api(aioclient_mock)) == n          # plus aucun essai
+
+
+async def test_installation_effacee_pendant_un_reimport(hass: HomeAssistant, connecte, serveur: Serveur) -> None:
+    serveur.refus_import = ("installation_effacee", MESSAGE_EFFACEE)
+    with patch(COLLECTEUR, faux_5min):
+        with pytest.raises(HomeAssistantError, match="supprimées"):
+            await hass.services.async_call(DOMAIN, "reimporter", {"debut": "2026-01-03", "fin": "2026-01-05"},
+                                           blocking=True, return_response=True)
+        await hass.async_block_till_done()
+    assert connecte.options["envoi_actif"] is False and connecte.runtime_data.etat.effacee
+
+
 async def test_deconnexion_oublie_l_etat_du_compte(hass: HomeAssistant, connecte, serveur: Serveur) -> None:
     """« Déconnecter ce compte » : logement, liste des logements, réglages vus chez le service,
     prochain envoi… étaient ceux de ce compte ; le suivant ne doit pas les retrouver."""
