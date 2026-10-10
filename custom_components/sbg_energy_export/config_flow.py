@@ -22,6 +22,12 @@ L'écran de sélection classe les appareils par intérêt pour l'analyse (gros
 consommateurs et pilotables, puis cuisson et lavage, puis consommation de fond),
 dit pourquoi en une phrase, et coche par défaut les recommandés ; la catégorie
 est proposée par des règles déterministes (``categories.py``).
+
+Version 0.6.1 : désactiver l'envoi ou retirer l'accord « Améliorer les outils SBG » depuis
+l'étape Envoi demande une confirmation (étape « confirmer », cases décochées par défaut).
+Constaté le 10/10/2026 sur une installation réelle : après le choix du gestionnaire de réseau,
+l'étape a été validée avec les deux interrupteurs décochés sans que l'utilisateur l'ait voulu,
+et 0.6.0 a retiré l'accord et coupé l'envoi sur cette seule foi.
 """
 from __future__ import annotations
 
@@ -57,6 +63,8 @@ from .const import (
     CHOIX_AUCUN,
     CHOIX_SELECTION,
     CHOIX_TOUS,
+    CONF_ARRET,
+    CONF_RETRAIT,
     CONSERVATION_DEFAUT,
     CONSERVATION_MAX,
     DATA_JETON,
@@ -258,6 +266,12 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
         self._proposees: dict[str, str] = {}
         self._connexion: envoi.Connexion | None = None
         self._tache: asyncio.Task[str] | None = None
+        # Étape Envoi (0.6.1) : ce qu'elle montrait à son ouverture, ce qui attend une confirmation
+        # (saisie reçue, effets à confirmer) et la réponse à cette confirmation.
+        self._reference: dict[str, Any] | None = None
+        self._en_attente: dict[str, Any] = {}
+        self._a_confirmer: dict[str, bool] = {}
+        self._confirme: dict[str, bool] | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choix : tous, aucun, ou une sélection."""
@@ -320,8 +334,21 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
             options=[SelectOptionDict(value=lg["id"], label=lg["nom"]) for lg in logements],
             mode=SelectSelectorMode.DROPDOWN))
 
+    def _affiche_envoi(self, connus: dict[str, Any], effacee: bool) -> dict[str, Any]:
+        """Ce que l'étape Envoi montre à son ouverture (aucune saisie encore)."""
+        return {OPT_ENVOI: bool(self._options.get(OPT_ENVOI, False)) and not effacee,
+                OPT_AMELIORER: bool(connus[OPT_AMELIORER])}
+
     async def async_step_envoi(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Envoi direct vers analyse.sbg-energy.com : désactivé par défaut."""
+        """Envoi direct vers analyse.sbg-energy.com : désactivé par défaut.
+
+        0.6.1 : désactiver l'envoi et retirer l'accord « Améliorer les outils SBG » (le service
+        efface alors les copies) ne se font JAMAIS sur la seule foi des interrupteurs reçus. Les
+        deux se comparent à ce que CE formulaire montrait à son ouverture (``self._reference``),
+        pas à un état relu au moment de valider ; et un interrupteur reçu décoché alors qu'il était
+        montré coché passe par l'étape « confirmer », dont les cases sont décochées par défaut :
+        sans confirmation, l'interrupteur reste comme il était et le reste du formulaire est
+        enregistré."""
         connecte = bool(self.config_entry.data.get(DATA_JETON))
         etat = self._etat()
         effacee = bool(etat and etat.effacee)
@@ -329,28 +356,51 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
         message = ""
         connus = self._reglages_connus()
         logements = self._logements_au_choix() if connecte else []
-        if user_input is None and effacee:
-            erreurs["base"] = "installation_effacee"      # dit dans les options, pas seulement en notification
+        if user_input is None:
+            self._reference = self._affiche_envoi(connus, effacee)
+            self._confirme = None
+            if effacee:
+                erreurs["base"] = "installation_effacee"  # dit dans les options, pas seulement en notification
+        reference = self._reference or self._affiche_envoi(connus, effacee)
         if user_input is not None:
             pas = int(user_input.get(OPT_PAS_ENVOI, PAS_ENVOI_DEFAUT))
             cp = str(user_input.get(OPT_CODE_POSTAL) or "").strip()
-            accord = bool(user_input.get(OPT_AMELIORER))
-            actif = bool(user_input.get(OPT_ENVOI))
+            # un interrupteur absent de la saisie n'a pas été touché : il vaut ce qui était montré
+            accord = bool(user_input.get(OPT_AMELIORER, reference[OPT_AMELIORER]))
+            actif = bool(user_input.get(OPT_ENVOI, reference[OPT_ENVOI]))
             grd = str(user_input.get(OPT_GRD) or GRD_INCONNU)
             grd = grd if grd in GRDS else GRD_INCONNU
             voulu = str(user_input.get(OPT_LOGEMENT) or "") if logements else ""
             logement = voulu if voulu and voulu != connus[OPT_LOGEMENT] else None
+            deconnecter = connecte and bool(user_input.get(OPT_DECONNECTER))
             if pas == 5 and not self._options.get(OPT_CINQ_MINUTES):
                 erreurs[OPT_PAS_ENVOI] = "pas_5_sans_option"
             elif (actif or cp) and not CODE_POSTAL.match(cp):
                 erreurs[OPT_CODE_POSTAL] = "code_postal"
             else:
+                if connecte and not deconnecter:
+                    # Décoché ici alors que c'était montré coché : seulement si confirmé.
+                    arret = reference[OPT_ENVOI] and not actif
+                    retrait = reference[OPT_AMELIORER] and not accord
+                    if (arret or retrait) and self._confirme is None:
+                        self._a_confirmer = {CONF_ARRET: arret, CONF_RETRAIT: retrait}
+                        self._en_attente = dict(user_input)
+                        return await self.async_step_confirmer()
+                    confirme, self._confirme = self._confirme or {}, None
+                    if arret and not confirme.get(CONF_ARRET):
+                        actif = True
+                    if retrait and not confirme.get(CONF_RETRAIT):
+                        accord = True
+                    if not accord and not reference[OPT_AMELIORER] and connus[OPT_AMELIORER]:
+                        # montré décoché et laissé décoché, mais l'accord a été donné entre-temps
+                        # (depuis le compte) : ce formulaire ne le retire pas
+                        accord = True
                 self._options[OPT_ENVOI] = actif
                 self._options[OPT_PAS_ENVOI] = pas
                 self._options[OPT_CODE_POSTAL] = cp
                 self._options[OPT_AMELIORER] = accord
                 self._options[OPT_GRD] = grd
-                if connecte and user_input.get(OPT_DECONNECTER):
+                if deconnecter:
                     await envoi.async_revoquer(self.hass, self.config_entry.data[DATA_JETON])
                     self.hass.config_entries.async_update_entry(
                         self.config_entry, data={k: v for k, v in self.config_entry.data.items() if k != DATA_JETON})
@@ -374,9 +424,11 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
                             self._options[OPT_ENVOI] = False
                 if not erreurs:
                     return self.async_create_entry(data=self._options)
+                # refusé : le formulaire revient avec ce qui a réellement été demandé au service
+                user_input = {**user_input, OPT_ENVOI: actif, OPT_AMELIORER: accord}
         pas_permis = ["5", "15", "60"] if self._options.get(OPT_CINQ_MINUTES) else ["15", "60"]
         saisie = user_input or {}
-        envoi_coche = bool(saisie.get(OPT_ENVOI, self._options.get(OPT_ENVOI, False)))
+        envoi_coche = bool(saisie.get(OPT_ENVOI, reference[OPT_ENVOI]))
         if erreurs.get("base") == "installation_effacee":
             envoi_coche = False
         schema: dict[Any, Any] = {
@@ -386,7 +438,7 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
             vol.Optional(OPT_GRD, default=str(saisie.get(OPT_GRD, connus[OPT_GRD]))):
                 SelectSelector(SelectSelectorConfig(options=[GRD_INCONNU, *GRDS], translation_key="grd",
                                                     mode=SelectSelectorMode.DROPDOWN)),
-            vol.Required(OPT_AMELIORER, default=bool(saisie.get(OPT_AMELIORER, connus[OPT_AMELIORER]))):
+            vol.Required(OPT_AMELIORER, default=bool(saisie.get(OPT_AMELIORER, reference[OPT_AMELIORER]))):
                 BooleanSelector(),
         }
         if logements:
@@ -404,6 +456,20 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
                                                               else "—",
                                                               "message": message,
                                                               "conditions": URL_CONDITIONS})
+
+    async def async_step_confirmer(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Confirmation de ce que l'étape Envoi a reçu décoché alors qu'elle le montrait coché.
+
+        Une case par effet (désactiver l'envoi ; retirer l'accord, ce qui efface les copies),
+        décochée par défaut. Ce qui n'est pas confirmé reste comme avant ; le reste de l'étape
+        Envoi (code postal, gestionnaire de réseau, logement, pas) est enregistré."""
+        if user_input is None:
+            return self.async_show_form(step_id="confirmer", data_schema=vol.Schema({
+                vol.Required(cle, default=False): BooleanSelector()
+                for cle in (CONF_ARRET, CONF_RETRAIT) if self._a_confirmer.get(cle)}))
+        self._confirme = {cle: user_input.get(cle) is True for cle in (CONF_ARRET, CONF_RETRAIT)
+                          if self._a_confirmer.get(cle)}
+        return await self.async_step_envoi(self._en_attente)
 
     async def async_step_connexion(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Code à saisir sur auth.sbg-energy.com ; attend la validation (10 minutes au plus)."""

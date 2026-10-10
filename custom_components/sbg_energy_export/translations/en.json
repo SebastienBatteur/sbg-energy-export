@@ -79,6 +79,18 @@
           "deconnecter": "Forgets the connection here and withdraws it at SBG Energy; nothing is sent anymore."
         }
       },
+      "confirmer": {
+        "title": "Confirm",
+        "description": "The previous step was submitted with a switch turned off that was on when it opened. Tick below only what you really want: whatever stays unticked **is not changed**, and the rest of the step (postcode, distribution system operator, home, step) is saved.",
+        "data": {
+          "confirmer_arret": "Turn off sending to analyse.sbg-energy.com",
+          "confirmer_retrait": "Withdraw my \"Improve SBG tools\" consent"
+        },
+        "data_description": {
+          "confirmer_arret": "Nothing more is sent until sending is ticked again. What SBG Energy already holds is not touched.",
+          "confirmer_retrait": "The service erases the pseudonymised copies already made; totals already given to the statistics, anonymous, can no longer be traced back."
+        }
+      },
       "connexion": {
         "title": "Connect your SBG Energy account",
         "description": "Open {url} and enter the code **{code}**, then sign in to your SBG Energy account (with your 6-digit code) and accept. This screen closes by itself (10 minutes at most)."

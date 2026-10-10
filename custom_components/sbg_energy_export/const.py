@@ -54,6 +54,10 @@ OPT_AMELIORER: Final = "ameliorer_outils"
 OPT_GRD: Final = "grd"
 OPT_LOGEMENT: Final = "logement"
 GRD_INCONNU: Final = "inconnu"
+# Version 0.6.1 : cases de l'étape « confirmer » (décochées par défaut), montrées quand l'étape
+# Envoi reçoit décoché un interrupteur qu'elle montrait coché. Jamais gardées dans les options.
+CONF_ARRET: Final = "confirmer_arret"        # désactiver l'envoi
+CONF_RETRAIT: Final = "confirmer_retrait"    # retirer l'accord (le service efface les copies)
 GRDS: Final = ("ores", "resa", "aieg", "aiesh", "rew", "sibelga", "fluvius")
 # Texte de l'étape Envoi accepté par l'utilisateur, nommé dans chaque requête de réglages (champ
 # ``texte_consentement``) pour que le service garde comme preuve le texte réellement affiché

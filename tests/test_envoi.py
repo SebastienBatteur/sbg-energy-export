@@ -461,10 +461,14 @@ async def test_accord_change_dans_les_options(hass: HomeAssistant, connecte, ser
         assert r["type"] is FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
         assert serveur.appels_reglages[-1] == {"source": SOURCE, "code_postal": "4000", "accord_amelioration": True}
-        # retrait : un appel aussi (le service efface les copies)
+        # retrait : un appel aussi (le service efface les copies), après confirmation (0.6.1)
         r = await _options_jusqu_a_envoi(hass, connecte)
         r = await hass.config_entries.options.async_configure(
             r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "4000", "ameliorer_outils": False})
+        assert r["step_id"] == "confirmer"
+        assert serveur.appels_reglages[-1]["accord_amelioration"] is True
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {"confirmer_retrait": True})
+        assert r["type"] is FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
         assert serveur.appels_reglages[-1]["accord_amelioration"] is False
         # refus du service : l'erreur s'affiche, rien n'est enregistré
