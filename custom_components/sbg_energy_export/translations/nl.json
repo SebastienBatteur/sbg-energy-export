@@ -79,6 +79,18 @@
           "deconnecter": "Vergeet de koppeling hier en trekt ze in bij SBG Energy; er wordt niets meer verzonden."
         }
       },
+      "confirmer": {
+        "title": "Bevestigen",
+        "description": "De vorige stap is bevestigd met een schakelaar uit die aan stond toen de stap openging. Vink hieronder alleen aan wat u echt wilt: wat uitgevinkt blijft, **wordt niet gewijzigd**, en de rest van de stap (postcode, netbeheerder, woning, stap) wordt opgeslagen.",
+        "data": {
+          "confirmer_arret": "Verzenden naar analyse.sbg-energy.com uitschakelen",
+          "confirmer_retrait": "Mijn toestemming \"SBG-tools verbeteren\" intrekken"
+        },
+        "data_description": {
+          "confirmer_arret": "Er wordt niets meer verzonden zolang verzenden niet opnieuw is aangevinkt. Wat al bij SBG Energy staat, blijft ongemoeid.",
+          "confirmer_retrait": "De dienst wist de reeds gemaakte gepseudonimiseerde kopieën; totalen die al aan de statistieken zijn gegeven, anoniem, zijn niet meer terug te vinden."
+        }
+      },
       "connexion": {
         "title": "Uw SBG Energy-account koppelen",
         "description": "Open {url} en voer de code **{code}** in, meld u dan aan bij uw SBG Energy-account (met uw code van 6 cijfers) en keur goed. Dit scherm sluit vanzelf (hoogstens 10 minuten)."

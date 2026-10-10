@@ -112,6 +112,8 @@ async def test_deconnectee_notification_retiree_si_envoi_desactive(hass: HomeAss
         r = await _options_jusqu_a_envoi(hass, connecte)
         r = await hass.config_entries.options.async_configure(
             r["flow_id"], {"envoi_actif": False, "pas_envoi": "15", "code_postal": "4000"})
+        assert r["step_id"] == "confirmer"                    # 0.6.1 : couper l'envoi se confirme
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {"confirmer_arret": True})
         assert r["type"] is FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
         assert NOTE not in _notes(hass)

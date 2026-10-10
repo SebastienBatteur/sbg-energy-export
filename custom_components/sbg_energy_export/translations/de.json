@@ -79,6 +79,18 @@
           "deconnecter": "Vergisst die Verbindung hier und widerruft sie bei SBG Energy; es wird nichts mehr gesendet."
         }
       },
+      "confirmer": {
+        "title": "Bestätigen",
+        "description": "Der vorige Schritt wurde mit einem ausgeschalteten Schalter bestätigt, der beim Öffnen eingeschaltet war. Kreuzen Sie unten nur an, was Sie wirklich wollen: Was nicht angekreuzt bleibt, **wird nicht geändert**, und der Rest des Schritts (Postleitzahl, Netzbetreiber, Wohnung, Schritt) wird gespeichert.",
+        "data": {
+          "confirmer_arret": "Senden an analyse.sbg-energy.com ausschalten",
+          "confirmer_retrait": "Meine Zustimmung „SBG-Werkzeuge verbessern“ widerrufen"
+        },
+        "data_description": {
+          "confirmer_arret": "Es wird nichts mehr gesendet, bis das Senden wieder angekreuzt wird. Was bereits bei SBG Energy liegt, bleibt unberührt.",
+          "confirmer_retrait": "Der Dienst löscht die bereits erstellten pseudonymisierten Kopien; bereits an die Statistiken gegebene Summen, anonym, lassen sich nicht mehr zurückverfolgen."
+        }
+      },
       "connexion": {
         "title": "Ihr SBG-Energy-Konto verbinden",
         "description": "Öffnen Sie {url} und geben Sie den Code **{code}** ein, melden Sie sich dann bei Ihrem SBG-Energy-Konto an (mit Ihrem 6-stelligen Code) und stimmen Sie zu. Dieser Bildschirm schließt sich von selbst (höchstens 10 Minuten)."

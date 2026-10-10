@@ -79,6 +79,18 @@
           "deconnecter": "Oublie la connexion ici et la retire chez SBG Energy ; plus rien n'est envoyé."
         }
       },
+      "confirmer": {
+        "title": "Confirmer",
+        "description": "L'étape précédente a été validée avec un interrupteur décoché qui était coché à son ouverture. Cochez ci-dessous seulement ce que vous voulez vraiment : ce qui reste décoché **n'est pas modifié**, et le reste de l'étape (code postal, gestionnaire de réseau, logement, pas) est enregistré.",
+        "data": {
+          "confirmer_arret": "Désactiver l'envoi à analyse.sbg-energy.com",
+          "confirmer_retrait": "Retirer mon accord « Améliorer les outils SBG »"
+        },
+        "data_description": {
+          "confirmer_arret": "Plus rien n'est envoyé tant que l'envoi n'est pas recoché. Ce qui est déjà chez SBG Energy n'est pas touché.",
+          "confirmer_retrait": "Le service efface les copies pseudonymisées déjà faites ; les totaux déjà versés aux statistiques, anonymes, ne peuvent plus être retrouvés."
+        }
+      },
       "connexion": {
         "title": "Connecter votre compte SBG Energy",
         "description": "Ouvrez {url} et saisissez le code **{code}**, puis connectez-vous à votre compte SBG Energy (avec votre code à 6 chiffres) et acceptez. Cet écran se ferme seul (10 minutes au plus)."
