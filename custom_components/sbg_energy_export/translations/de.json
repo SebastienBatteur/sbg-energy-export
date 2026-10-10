@@ -118,7 +118,8 @@
       "pas_5_sans_option": "Der 5-Minuten-Schritt erfordert die Option „feinster Schritt: 5 Minuten“.",
       "code_postal": "Zum Senden ist eine belgische Postleitzahl mit 4 Ziffern erforderlich.",
       "reglages_refuses": "Der Dienst hat abgelehnt: {message}",
-      "installation_effacee": "Die Daten dieser Installation wurden aus Ihrem SBG-Energy-Konto gelöscht: Das Senden ist aus und versucht es nicht mehr. Um es fortzusetzen, erlauben Sie diese Installation zuerst wieder in Ihrem Konto und kreuzen Sie dann „An analyse.sbg-energy.com senden“ an."
+      "installation_effacee": "Die Daten dieser Installation wurden aus Ihrem SBG-Energy-Konto gelöscht: Das Senden ist aus und versucht es nicht mehr. Um es fortzusetzen, erlauben Sie diese Installation zuerst wieder in Ihrem Konto und kreuzen Sie dann „An analyse.sbg-energy.com senden“ an.",
+      "accord_retire": "Ihre Zustimmung „SBG-Werkzeuge verbessern“ wurde in Ihrem Konto widerrufen, während dieses Formular geöffnet war: Sie bleibt widerrufen, und es wurde nichts gespeichert. Prüfen Sie die Einstellungen unten, kreuzen Sie die Zustimmung nur dann wieder an, wenn Sie sie erneut geben möchten, und bestätigen Sie."
     }
   },
   "selector": {

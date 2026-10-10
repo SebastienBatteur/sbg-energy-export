@@ -118,7 +118,8 @@
       "pas_5_sans_option": "De stap van 5 minuten vereist de optie \"fijnste stap: 5 minuten\".",
       "code_postal": "Een Belgische postcode van 4 cijfers is verplicht om te verzenden.",
       "reglages_refuses": "De dienst weigerde: {message}",
-      "installation_effacee": "De gegevens van deze installatie zijn verwijderd vanuit uw SBG Energy-account: het verzenden staat uit en probeert het niet meer opnieuw. Om het te hervatten: sta deze installatie eerst opnieuw toe vanuit uw account en vink daarna \"Verzenden naar analyse.sbg-energy.com\" aan."
+      "installation_effacee": "De gegevens van deze installatie zijn verwijderd vanuit uw SBG Energy-account: het verzenden staat uit en probeert het niet meer opnieuw. Om het te hervatten: sta deze installatie eerst opnieuw toe vanuit uw account en vink daarna \"Verzenden naar analyse.sbg-energy.com\" aan.",
+      "accord_retire": "Uw toestemming \"SBG-tools verbeteren\" is vanuit uw account ingetrokken terwijl dit formulier open stond: ze blijft ingetrokken en er is niets opgeslagen. Controleer de instellingen hieronder, vink de toestemming alleen opnieuw aan als u ze opnieuw wilt geven, en bevestig."
     }
   },
   "selector": {

@@ -118,7 +118,8 @@
       "pas_5_sans_option": "Le pas de 5 minutes demande l'option « pas plus fin : 5 minutes ».",
       "code_postal": "Code postal belge à 4 chiffres attendu (obligatoire pour envoyer).",
       "reglages_refuses": "Le service a refusé : {message}",
-      "installation_effacee": "Les données de cette installation ont été supprimées depuis votre compte SBG Energy : l'envoi est coupé et ne réessaie plus. Pour le reprendre, autorisez d'abord cette installation à nouveau depuis votre compte, puis cochez « Envoyer à analyse.sbg-energy.com »."
+      "installation_effacee": "Les données de cette installation ont été supprimées depuis votre compte SBG Energy : l'envoi est coupé et ne réessaie plus. Pour le reprendre, autorisez d'abord cette installation à nouveau depuis votre compte, puis cochez « Envoyer à analyse.sbg-energy.com ».",
+      "accord_retire": "Votre accord « Améliorer les outils SBG » a été retiré depuis votre compte pendant que ce formulaire était ouvert : il reste retiré et rien n'a été enregistré. Vérifiez les réglages ci-dessous, recochez l'accord seulement si vous voulez le redonner, puis validez."
     }
   },
   "selector": {

@@ -377,24 +377,37 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
                 erreurs[OPT_PAS_ENVOI] = "pas_5_sans_option"
             elif (actif or cp) and not CODE_POSTAL.match(cp):
                 erreurs[OPT_CODE_POSTAL] = "code_postal"
-            else:
-                if connecte and not deconnecter:
-                    # Décoché ici alors que c'était montré coché : seulement si confirmé.
-                    arret = reference[OPT_ENVOI] and not actif
-                    retrait = reference[OPT_AMELIORER] and not accord
-                    if (arret or retrait) and self._confirme is None:
-                        self._a_confirmer = {CONF_ARRET: arret, CONF_RETRAIT: retrait}
-                        self._en_attente = dict(user_input)
-                        return await self.async_step_confirmer()
-                    confirme, self._confirme = self._confirme or {}, None
-                    if arret and not confirme.get(CONF_ARRET):
-                        actif = True
-                    if retrait and not confirme.get(CONF_RETRAIT):
-                        accord = True
-                    if not accord and not reference[OPT_AMELIORER] and connus[OPT_AMELIORER]:
-                        # montré décoché et laissé décoché, mais l'accord a été donné entre-temps
-                        # (depuis le compte) : ce formulaire ne le retire pas
-                        accord = True
+            elif connecte and not deconnecter:
+                # Décoché ici alors que c'était montré coché : seulement si confirmé.
+                arret = reference[OPT_ENVOI] and not actif
+                retrait = reference[OPT_AMELIORER] and not accord
+                if (arret or retrait) and self._confirme is None:
+                    self._a_confirmer = {CONF_ARRET: arret, CONF_RETRAIT: retrait}
+                    self._en_attente = dict(user_input)
+                    return await self.async_step_confirmer()
+                confirme, self._confirme = self._confirme or {}, None
+                if arret and not confirme.get(CONF_ARRET):
+                    actif = True
+                if retrait and not confirme.get(CONF_RETRAIT):
+                    accord = True
+                # L'accord ne part « donné » que si l'interrupteur est passé ICI de décoché (tel
+                # que montré) à coché. Laissé comme montré, c'est l'état du service qui vaut :
+                if accord and reference[OPT_AMELIORER] and not connus[OPT_AMELIORER]:
+                    # montré coché, mais retiré entre-temps depuis le compte : il reste retiré.
+                    # Rien n'est enregistré ; le formulaire revient, case décochée, et le dit
+                    # (la recocher alors est un choix fait ici).
+                    accord = False
+                    self._reference = reference = {**reference, OPT_AMELIORER: False}
+                    erreurs["base"] = "accord_retire"
+                elif not accord and not reference[OPT_AMELIORER] and connus[OPT_AMELIORER]:
+                    # montré décoché et laissé décoché, mais donné entre-temps depuis le
+                    # compte : ce formulaire ne le retire pas
+                    accord = True
+                if (actif or cp) and not CODE_POSTAL.match(cp):
+                    # sur la valeur FINALE : un arrêt non confirmé laisse l'envoi actif, qui ne
+                    # s'enregistre pas sans code postal
+                    erreurs[OPT_CODE_POSTAL] = "code_postal"
+            if not erreurs:
                 self._options[OPT_ENVOI] = actif
                 self._options[OPT_PAS_ENVOI] = pas
                 self._options[OPT_CODE_POSTAL] = cp
@@ -424,7 +437,8 @@ class SbgOptionsFlow(_Etapes, OptionsFlow):
                             self._options[OPT_ENVOI] = False
                 if not erreurs:
                     return self.async_create_entry(data=self._options)
-                # refusé : le formulaire revient avec ce qui a réellement été demandé au service
+            if erreurs:
+                # le formulaire revient avec ce qui a été retenu (et, après un refus, demandé au service)
                 user_input = {**user_input, OPT_ENVOI: actif, OPT_AMELIORER: accord}
         pas_permis = ["5", "15", "60"] if self._options.get(OPT_CINQ_MINUTES) else ["15", "60"]
         saisie = user_input or {}

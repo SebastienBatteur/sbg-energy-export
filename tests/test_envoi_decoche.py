@@ -204,3 +204,86 @@ async def test_deconnecter_ne_demande_pas_de_confirmation(hass: HomeAssistant, m
     assert serveur.revocations == 1
     assert DATA_JETON not in mise_a_jour.data
     assert mise_a_jour.options["envoi_actif"] is False
+
+
+async def test_accord_retire_depuis_le_compte_un_autre_reglage_ne_le_redonne_pas(hass: HomeAssistant, mise_a_jour,
+                                                                                serveur: Serveur) -> None:
+    """Relecture de la demande #2 : montré coché, laissé coché, alors que l'accord a été RETIRÉ
+    entre-temps depuis le compte. Enregistrer le gestionnaire ne doit pas le redonner : l'accord
+    ne part « donné » que si l'interrupteur est passé ici de décoché à coché."""
+    with patch(COLLECTEUR, faux_5min):
+        r = await _flux_complet(hass, mise_a_jour)
+        d = _defauts(r)
+        assert d["ameliorer_outils"] is True
+        serveur.reglages = {"code_postal": "5000", "accord_amelioration": False}
+        await mise_a_jour.runtime_data.etat.async_noter(reglages=dict(serveur.reglages))
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {**d, "grd": "ores"})
+        # rien n'est parti ni enregistré : le formulaire revient, case décochée, et le dit
+        assert (r["type"], r["step_id"], r["errors"]) == (FlowResultType.FORM, "envoi", {"base": "accord_retire"})
+        assert serveur.appels_reglages == []
+        assert "grd" not in mise_a_jour.options
+        d = _defauts(r)
+        assert (d["envoi_actif"], d["ameliorer_outils"], d["grd"]) == (True, False, "ores")
+        # validé tel quel : le gestionnaire part, l'accord reste retiré, sans confirmation de plus
+        r = await hass.config_entries.options.async_configure(r["flow_id"], d)
+        assert r["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert serveur.appels_reglages == [{**REGLAGE, "accord_amelioration": False, "grd": "ores"}]
+    assert (mise_a_jour.options["envoi_actif"], mise_a_jour.options["ameliorer_outils"]) == (True, False)
+
+
+async def test_accord_retire_depuis_le_compte_puis_redonne_ici(hass: HomeAssistant, mise_a_jour,
+                                                               serveur: Serveur) -> None:
+    """Après le message, recocher la case est un choix fait ici : l'accord part « donné »."""
+    with patch(COLLECTEUR, faux_5min):
+        r = await _flux_complet(hass, mise_a_jour)
+        d = _defauts(r)
+        serveur.reglages = {"code_postal": "5000", "accord_amelioration": False}
+        await mise_a_jour.runtime_data.etat.async_noter(reglages=dict(serveur.reglages))
+        r = await hass.config_entries.options.async_configure(r["flow_id"], d)
+        assert r["errors"] == {"base": "accord_retire"}
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {**_defauts(r), "ameliorer_outils": True})
+        assert r["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert serveur.appels_reglages == [{**REGLAGE, "accord_amelioration": True}]
+    assert mise_a_jour.options["ameliorer_outils"] is True
+
+
+async def test_accord_retire_depuis_le_compte_pendant_la_confirmation(hass: HomeAssistant, mise_a_jour,
+                                                                      serveur: Serveur) -> None:
+    """Relecture de la demande #2 : l'écran Confirmer est ouvert, l'accord est retiré depuis le
+    compte, et « retirer mon accord » est laissé décoché. « Non confirmé » veut dire « rien ne
+    change ici », pas « redonner l'accord »."""
+    with patch(COLLECTEUR, faux_5min):
+        r = await _flux_complet(hass, mise_a_jour)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {**_defauts(r), "grd": "ores", "ameliorer_outils": False})
+        assert r["step_id"] == "confirmer"
+        serveur.reglages = {"code_postal": "5000", "accord_amelioration": False}
+        await mise_a_jour.runtime_data.etat.async_noter(reglages=dict(serveur.reglages))
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {"confirmer_retrait": False})
+        assert (r["step_id"], r["errors"]) == ("envoi", {"base": "accord_retire"})
+        assert serveur.appels_reglages == []
+        r = await hass.config_entries.options.async_configure(r["flow_id"], _defauts(r))
+        assert r["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert [a["accord_amelioration"] for a in serveur.appels_reglages] == [False]
+    assert serveur.reglages["accord_amelioration"] is False
+    assert mise_a_jour.options["ameliorer_outils"] is False
+
+
+async def test_arret_non_confirme_avec_code_postal_vide(hass: HomeAssistant, mise_a_jour, serveur: Serveur) -> None:
+    """Relecture de la demande #2 : code postal vidé et envoi reçu décoché ; l'arrêt n'est pas
+    confirmé, l'envoi reste donc actif. Il ne s'enregistre pas sans code postal : le code postal
+    se vérifie sur la valeur finale de l'interrupteur."""
+    with patch(COLLECTEUR, faux_5min):
+        r = await _flux_complet(hass, mise_a_jour)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {**_defauts(r), "envoi_actif": False, "code_postal": ""})
+        assert r["step_id"] == "confirmer"
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {"confirmer_arret": False})
+        assert (r["type"], r["step_id"]) == (FlowResultType.FORM, "envoi")
+        assert r["errors"] == {"code_postal": "code_postal"}
+        assert _defauts(r)["envoi_actif"] is True
+    assert serveur.appels_reglages == []
+    assert (mise_a_jour.options["envoi_actif"], mise_a_jour.options["code_postal"]) == (True, "5000")

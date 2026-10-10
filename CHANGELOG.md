@@ -19,7 +19,12 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
     service avant cette confirmation ;
   - la comparaison se fait avec ce que l'étape **montrait à son ouverture**, plus avec l'état relu
     au moment de valider : un accord donné entre-temps depuis le compte n'est plus retiré par un
-    formulaire où la case, montrée décochée, n'a pas été touchée ;
+    formulaire où la case, montrée décochée, n'a pas été touchée ; et un accord **retiré**
+    entre-temps depuis le compte n'est jamais redonné : l'accord ne part « donné » que si la case
+    est passée, dans ce formulaire, de décochée à cochée. Dans ce cas l'étape revient, case
+    décochée, avec un message, et rien n'est enregistré avant une nouvelle validation ;
+  - le code postal est vérifié sur l'état final de l'interrupteur d'envoi (un arrêt non confirmé
+    laisse l'envoi actif, qui ne s'enregistre pas sans code postal) ;
   - un interrupteur absent de la saisie vaut ce qui était montré, jamais « décoché ».
   « Déconnecter mon compte SBG Energy » reste un geste direct, sans confirmation de plus (aucun
   réglage ne part alors au service).
