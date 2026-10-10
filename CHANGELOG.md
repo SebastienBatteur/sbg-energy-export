@@ -14,8 +14,8 @@ Le format de fichier « SBG HA export » a sa propre version (voir `docs/FORMAT_
   Dans tous les cas le passage suivant reprend où le précédent s'est arrêté : aucune période
   n'est marquée comme enregistrée sans l'avoir été, **aucune mesure n'est perdue** (comme avant).
 - Corrigé : plus aucune requête n'est envoyée au recorder quand il n'est pas en marche (base pas
-  encore prête, démarrage du recorder en échec, recorder arrêté) ; le passage est reporté au
-  suivant. Avant, la requête partait quand même (« cannot schedule new futures after shutdown »).
+  encore prête, démarrage du recorder en échec, recorder arrêté), y compris entre deux jours d'un
+  rattrapage ; le passage s'arrête là et le suivant reprend. Avant, la requête partait quand même (« cannot schedule new futures after shutdown »).
 - Tests : le test d'installation qui avance l'horloge laissait le minuteur du collecteur lancer
   son passage après la fin du test, pendant la fermeture du recorder de test (échec intermittent
   de la CI, « no such table: statistics_meta »). Il fait maintenant sonner le minuteur lui-même

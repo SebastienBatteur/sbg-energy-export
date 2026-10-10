@@ -385,3 +385,44 @@ async def test_erreur_de_base_au_demarrage_consignee(
     assert [r.levelno for r in lignes] == [logging.WARNING]
     assert "no such table: statistics_meta" in lignes[0].getMessage()
     assert installe.runtime_data.collecteur.prochain == ONZE_HEURES
+
+
+async def test_recorder_arrete_entre_deux_tranches_statistique_nouvelle_pas_marquee(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Un rattrapage fait une requête par jour. Si le recorder s'arrête entre deux, la suivante
+    ne part pas, et un appareil ajouté dont le rattrapage n'est pas fini n'est pas noté comme
+    suivi : il est rattrapé en entier au passage suivant."""
+    instance = get_instance(hass)
+    appels: list[datetime] = []
+
+    def s_arrete_a_la_deuxieme(hass, debut, fin, ids, periode, unites, types):
+        appels.append(debut)
+        if len(appels) == 2:  # première tranche du rattrapage du frigo (10 jours, 10 requêtes)
+            instance.is_running = False
+        return faux_5min(hass, debut, fin, ids, periode, unites, types)
+
+    try:
+        with patch(PATCH_STATS, s_arrete_a_la_deuxieme):
+            hass.config_entries.async_update_entry(installe, options={
+                "choix": "selection", "appareils": ["sensor.frigo_cave"], "categories": {"sensor.frigo_cave": "autre"}})
+            await hass.async_block_till_done(wait_background_tasks=True)
+        collecteur = installe.runtime_data.collecteur
+        assert len(appels) == 2
+        assert "sensor.frigo_cave" not in collecteur.suivies
+        assert "sensor.frigo_cave" not in (await collecteur._store.async_load())["suivies"]
+    finally:
+        instance.is_running = True
+    # le recorder est de retour : le frigo est rattrapé (ses 5 min existent de 10:00 à 11:00)
+    appels.clear()
+    with patch(PATCH_STATS, s_arrete_a_la_deuxieme):
+        tache = await tic(hass, freezer, 17)
+    instance.is_running = True
+    assert tache.exception() is None
+    assert len(appels) == 2  # arrêté de nouveau à la deuxième requête : toujours pas noté
+    assert "sensor.frigo_cave" not in collecteur.suivies
+    with patch(PATCH_STATS, faux_5min):
+        await tic(hass, freezer, 32)
+    assert "sensor.frigo_cave" in collecteur.suivies
+    lu = await collecteur.async_lire(["sensor.frigo_cave"], ONZE_HEURES - 3600, ONZE_HEURES)
+    assert lu["sensor.frigo_cave"] == {ONZE_HEURES - 3600 + k * 900: pytest.approx(0.0125) for k in range(4)}
