@@ -223,6 +223,15 @@ class Etat:
             donnees["source"] = source
         self.donnees = donnees
 
+    async def async_oublier_compte(self) -> None:
+        """Tout ce qui vient du compte (réglages vus chez le service, logement, installation
+        effacée ou déconnectée, dernier et prochain envoi) : seul l'identifiant de l'installation
+        reste. Un autre compte, connecté ensuite, ne doit rien en reprendre."""
+        self.donnees = {"source": self.donnees["source"]} if self.donnees.get("source") else {}
+        await self._store.async_save(self.donnees)
+        for ecouteur in list(self._ecouteurs):
+            ecouteur()
+
     async def async_supprimer(self) -> None:
         """Intégration supprimée : l'état de son installation ne sert plus à rien."""
         self.donnees = {}
@@ -439,6 +448,17 @@ async def async_oublier_deconnectee(hass: HomeAssistant, entree: ConfigEntry) ->
     etat: Etat = entree.runtime_data.etat
     if etat.deconnectee:
         await etat.async_noter(deconnectee=False)
+    persistent_notification.async_dismiss(hass, NOTIF_DECONNECTEE)
+
+
+async def async_oublier_compte(hass: HomeAssistant, etat: Etat) -> None:
+    """Compte déconnecté, autre compte connecté, ou intégration supprimée : l'état gardé et les
+    notifications « envoi coupé » et « installation déconnectée » parlaient du compte précédent.
+
+    ``logements_de`` garde exprès ce qui est connu quand le service ne redonne pas ses champs
+    facultatifs : sans cet oubli, le logement d'un compte s'afficherait pour le suivant."""
+    await etat.async_oublier_compte()
+    persistent_notification.async_dismiss(hass, NOTIF_EFFACEE)
     persistent_notification.async_dismiss(hass, NOTIF_DECONNECTEE)
 
 

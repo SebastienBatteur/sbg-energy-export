@@ -283,3 +283,45 @@ async def test_etat_de_l_envoi_lie_a_l_installation(hass: HomeAssistant) -> None
     autre = envoi.Etat(hass)
     await autre.async_charger("f" * 32)
     assert not autre.effacee and autre.logement is None and autre.prochaine is None
+
+
+async def test_deconnexion_oublie_l_etat_du_compte(hass: HomeAssistant, connecte, serveur: Serveur) -> None:
+    """« Déconnecter ce compte » : logement, liste des logements, réglages vus chez le service,
+    prochain envoi… étaient ceux de ce compte ; le suivant ne doit pas les retrouver."""
+    etat = connecte.runtime_data.etat
+    await etat.async_noter(logement={"id": "7", "nom": "Mon logement"},
+                           logements=[{"id": "7", "nom": "Mon logement"}, {"id": "9", "nom": "Logement 2"}],
+                           reglages={"code_postal": "4000", "grd": "ores"}, prochaine="2026-02-02",
+                           derniere="2026-01-06T12:00:00+00:00", deconnectee=True)
+    with patch(COLLECTEUR, faux_5min):
+        r = await _options_jusqu_a_envoi(hass, connecte)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"envoi_actif": True, "pas_envoi": "15", "code_postal": "4000", "deconnecter": True})
+        assert r["type"] is FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+    assert DATA_JETON not in connecte.data
+    assert etat.donnees == {"source": SOURCE}
+    nouvel = envoi.Etat(hass)
+    await nouvel.async_charger(SOURCE)
+    assert nouvel.logement is None and nouvel.logements == [] and nouvel.prochaine is None
+
+
+async def test_autre_compte_connecte_ne_reprend_pas_le_logement(hass: HomeAssistant, freezer: FrozenDateTimeFactory,
+                                                                tmp_path, serveur: Serveur) -> None:
+    """Jeton perdu sans « déconnecter » (expiré, retiré depuis le compte), puis connexion d'un compte
+    auquel le service répond « à la 0.5 » (sans ``logement``) : parcours de 0.5, sans le logement
+    ni le sélecteur du compte précédent."""
+    with patch(COLLECTEUR, faux_5min):
+        entree = await _installer(hass, freezer, tmp_path, OPTIONS, {DATA_SOURCE: SOURCE})
+        await entree.runtime_data.etat.async_noter(
+            logement={"id": "7", "nom": "Mon logement"}, effacee=True, prochaine="2026-02-02",
+            logements=[{"id": "7", "nom": "Mon logement"}, {"id": "9", "nom": "Logement 2"}])
+        r = await _connecter(hass, entree, {"envoi_actif": True, "pas_envoi": "15", "code_postal": "4000"})
+        assert r["type"] is FlowResultType.CREATE_ENTRY          # pas d'étape « logement »
+        await hass.async_block_till_done()
+        etat = entree.runtime_data.etat
+        assert etat.logement is None and etat.logements == [] and not etat.effacee and etat.prochaine is None
+        r = await _options_jusqu_a_envoi(hass, entree)
+    assert "logement" not in _defauts(r)
+    assert r["description_placeholders"]["logement"] == "—"
+    assert entree.data[DATA_SOURCE] == SOURCE                  # l'identifiant de l'installation ne change pas
