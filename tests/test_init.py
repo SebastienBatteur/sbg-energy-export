@@ -2,6 +2,7 @@
 """Intégration complète avec un vrai recorder (SQLite en mémoire)."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 import html
 import io
@@ -17,10 +18,11 @@ from homeassistant.components.recorder.statistics import (
     async_import_statistics,
     statistics_during_period as vrai_statistics_during_period,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.setup import async_setup_component
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from pytest_homeassistant_custom_component.components.recorder.common import async_wait_recording_done
 
 from custom_components.sbg_energy_export.const import DOMAIN
@@ -187,3 +189,61 @@ async def test_dechargement(installe, hass: HomeAssistant) -> None:
     assert collecteur._arret is not None
     assert await hass.config_entries.async_unload(installe.entry_id)
     assert collecteur._arret is None
+
+
+async def test_passage_periodique_suivi_et_annule_au_dechargement(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Le passage lancé par le minuteur est une tâche de fond suivie : le déchargement l'annule
+    (avant : tâche orpheline, qui interrogeait encore le recorder après l'arrêt)."""
+    collecteur = installe.runtime_data.collecteur
+    parti, jamais = asyncio.Event(), asyncio.Event()
+
+    async def lent() -> int:
+        parti.set()
+        await jamais.wait()
+        return 0
+
+    with patch.object(collecteur, "async_rattraper", lent):
+        t = MAINTENANT.replace(minute=17, second=30)
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        await asyncio.wait_for(parti.wait(), 5)
+        tache = collecteur._passage
+        assert tache is not None and not tache.done()
+        assert tache in hass._background_tasks
+        # un passage encore en cours : le minuteur suivant n'en lance pas un second
+        t = MAINTENANT.replace(minute=32, second=30)
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        assert collecteur._passage is tache
+        assert await hass.config_entries.async_unload(installe.entry_id)
+        await hass.async_block_till_done()
+    assert tache.cancelled()
+    assert collecteur._passage is None and collecteur._arret is None and collecteur._arret_ha is None
+
+
+async def test_plus_de_passage_a_l_arret_de_home_assistant(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    """Arrêt de Home Assistant (l'entrée n'est pas déchargée) : le minuteur est retiré et rien
+    n'est plus demandé au recorder, qui se ferme."""
+    collecteur = installe.runtime_data.collecteur
+    appels: list[int] = []
+
+    async def compte() -> int:
+        appels.append(1)
+        return 0
+
+    with patch.object(collecteur, "async_rattraper", compte):
+        hass.set_state(CoreState.stopping)
+        collecteur._async_tic(MAINTENANT)          # minuteur déjà en route au moment de l'arrêt
+        assert collecteur._passage is None
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+        await hass.async_block_till_done()
+        assert collecteur._arret is None and collecteur._arret_ha is None
+        t = MAINTENANT.replace(minute=17, second=30)
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert appels == []

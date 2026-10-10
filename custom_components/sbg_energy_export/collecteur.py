@@ -41,7 +41,8 @@ from typing import Any
 from homeassistant.components.energy.data import async_get_manager
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.statistics import statistics_during_period
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.helpers.storage import Store
 
@@ -138,6 +139,8 @@ class Collecteur:
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.collecteur")
         self._verrou = asyncio.Lock()
         self._arret: Callable[[], None] | None = None
+        self._arret_ha: Callable[[], None] | None = None  # écoute de l'arrêt de Home Assistant
+        self._passage: asyncio.Task[int] | None = None    # passage périodique en cours
         self._ecouteurs: list[Callable[[], None]] = []
         self.prochain: int | None = None  # début de la prochaine période à traiter
         self.premier: int | None = None   # première période enregistrée
@@ -162,16 +165,42 @@ class Collecteur:
         self._arret = async_track_utc_time_change(
             self.hass, self._async_tic, minute=[2, 17, 32, 47], second=30
         )
+        self._arret_ha = self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, self._async_arret_ha)
 
     @callback
     def async_arreter(self) -> None:
-        """Annule la programmation."""
+        """Annule la programmation et le passage périodique en cours (déchargement de l'entrée)."""
         if self._arret:
             self._arret()
             self._arret = None
+        if self._arret_ha:
+            self._arret_ha()
+            self._arret_ha = None
+        if self._passage and not self._passage.done():
+            self._passage.cancel()
+        self._passage = None
 
-    async def _async_tic(self, _maintenant: datetime) -> None:
-        await self.async_rattraper()
+    @callback
+    def _async_arret_ha(self, _evenement: Event) -> None:
+        """Home Assistant s'arrête : plus de passage, celui en cours est abandonné (il reprendra
+        au démarrage là où l'état enregistré s'est arrêté)."""
+        self._arret_ha = None  # écoute à usage unique, déjà retirée par Home Assistant
+        self.async_arreter()
+
+    @callback
+    def _async_tic(self, _maintenant: datetime) -> None:
+        """Passage périodique, en tâche de fond suivie.
+
+        Une tâche lancée directement par le minuteur n'appartient à personne : ni le déchargement
+        de l'entrée ni l'arrêt de Home Assistant ne l'annulent, et elle demande encore des
+        statistiques au recorder une fois celui-ci fermé (« cannot schedule new futures after
+        shutdown »). Celle-ci est annulée par ``async_arreter`` et, en tâche de fond, par Home
+        Assistant à son arrêt."""
+        if self.hass.is_stopping or (self._passage and not self._passage.done()):
+            return
+        self._passage = self.hass.async_create_background_task(
+            self.async_rattraper(), f"{DOMAIN}_passage", eager_start=True
+        )
 
     async def _async_sauver(self) -> None:
         await self._store.async_save({
