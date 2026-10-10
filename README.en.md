@@ -22,7 +22,7 @@ yourself to an analysis service such as analyse.sbg-energy.com.
   integration picks up those ~10 days at installation, then records every quarter-hour (or,
   optionally, every 5-minute period) as it goes.
 
-> Status: **version 0.6.1, beta**. Apache-2.0 licence. User interface in English, French, Dutch and
+> Status: **version 0.6.2, beta**. Apache-2.0 licence. User interface in English, French, Dutch and
 > German. Problems and ideas: [issues](https://github.com/SebastienBatteur/sbg-energy-export/issues);
 > security vulnerabilities: see [SECURITY.md](SECURITY.md). Version history: [CHANGELOG.md](CHANGELOG.md).
 
