@@ -519,6 +519,22 @@ async def _envoyer_jours(hass: HomeAssistant, entree: ConfigEntry, client: Clien
 
 async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode: tuple[date, date] | None,
                    manuel: bool) -> Bilan | None:
+    """Une session d'envoi. ``installation_effacee`` coupe l'envoi quelle que soit la requête qui
+    le reçoit (jours, réglages, ouverture, morceau), puis l'erreur remonte comme les autres.
+
+    Aujourd'hui le service ne répond ainsi qu'aux requêtes qui créeraient l'installation (réglages
+    et ouverture de session) ; le traiter ici, une fois, évite de dépendre de ce détail : sinon un
+    refus venu d'une autre requête laisserait l'envoi coché et la tâche réessaierait chaque jour."""
+    try:
+        return await _session_ouverte(hass, entree, mode, periode, manuel)
+    except EnvoiErreur as e:
+        if e.code == EFFACEE and actif(entree):   # pas déjà coupé (par async_reglages)
+            await async_couper_effacee(hass, entree, e)
+        raise
+
+
+async def _session_ouverte(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode: tuple[date, date] | None,
+                           manuel: bool) -> Bilan | None:
     d = entree.runtime_data
     etat: Etat = d.etat
     if not actif(entree):
@@ -550,12 +566,7 @@ async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode:
     ouverture: dict[str, Any] = {"source": source, "pas": pas, "mode": mode}
     if periode:
         ouverture.update(debut=periode[0].isoformat(), fin=periode[1].isoformat())
-    try:
-        s = await client.async_requete("POST", "synchros", json=ouverture)
-    except EnvoiErreur as e:
-        if e.code == EFFACEE:
-            await async_couper_effacee(hass, entree, e)
-        raise
+    s = await client.async_requete("POST", "synchros", json=ouverture)
     jour_min = date.fromisoformat(j.get("jour_min") or s.get("jour_min") or "2000-01-01")
     fin = fin_envoyable()
     if periode:
@@ -579,8 +590,10 @@ async def _session(hass: HomeAssistant, entree: ConfigEntry, mode: str, periode:
         # même interrompu, la session est fermée : les jours arrivés comptent et le rapport se recalcule
         try:
             t = await client.async_requete("POST", f"synchros/{s['id']}/terminer")
-        except EnvoiErreur:
+        except EnvoiErreur as e:
             t = {}
+            if e.code == EFFACEE and actif(entree):   # cette erreur-ci ne remonte pas : coupé ici
+                await async_couper_effacee(hass, entree, e)
     bilan.prochaine = (t.get("synchro") or {}).get("prochaine")
     bilan.rapport, bilan.compte = t.get("rapport"), t.get("compte")
     await etat.async_noter(derniere=datetime.now(UTC).isoformat(timespec="seconds"), prochaine=bilan.prochaine,

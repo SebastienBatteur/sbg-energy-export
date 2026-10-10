@@ -76,6 +76,8 @@ class Serveur:
         self.statut_refus = 403
         self.refus_synchros: tuple[str, str] | None = None
         self.refus_jours: tuple[str, str] | None = None     # 403 de GET jours (installation déconnectée)
+        self.refus_import: tuple[str, str] | None = None    # 409 de POST import
+        self.refus_terminer: tuple[str, str] | None = None  # 409 de POST synchros/<id>/terminer
         self.textes: list[str | None] = []                   # champ « texte_consentement » de chaque réglage
         # 0.6.0 : champs facultatifs de la réponse ; None = service qui ne les connaît pas (0.5)
         self.logements: list[dict] | None = None
@@ -158,6 +160,8 @@ class Serveur:
                 return self.r(method, url, 429, code="limite_mensuelle", message="Deja envoye ce mois-ci.")
             return self.r(method, url, 201, id="session1", jour_min="2023-01-06")
         if chemin == "import":
+            if self.refus_import:
+                return self.r(method, url, 409, code=self.refus_import[0], message=self.refus_import[1])
             self.envois.append((data.decode().split("# pas_minutes: ")[1][:2].strip(), data))
             jours = sorted({l[:10] for l in data.decode().splitlines() if l[:2] == "20"})
             nouveaux = [j for j in jours if j not in self.jours]
@@ -165,6 +169,8 @@ class Serveur:
             return self.r(method, url, ajoutes=nouveaux, remplaces=[j for j in jours if j not in nouveaux],
                           ignores=[], refuses=[], controles="valide")
         if chemin.endswith("/terminer"):
+            if self.refus_terminer:
+                return self.r(method, url, 409, code=self.refus_terminer[0], message=self.refus_terminer[1])
             self.terminees += 1
             self.permise = False
             return self.r(method, url, jours_recus=len(self.jours), rapport="reglages_manquants",
