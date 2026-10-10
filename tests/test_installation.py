@@ -25,7 +25,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.setup import async_setup_component
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from pytest_homeassistant_custom_component.components.recorder.common import async_wait_recording_done
 
 from custom_components.sbg_energy_export import stockage
@@ -105,6 +105,25 @@ async def installer(hass: HomeAssistant, freezer: FrozenDateTimeFactory, tmp_pat
     return entree
 
 
+async def passage_du_minuteur_termine(hass: HomeAssistant, entree: MockConfigEntry) -> None:
+    """Fait sonner le minuteur du collecteur, échu depuis le saut d'horloge, et attend son passage.
+
+    Avancer l'horloge figée d'une heure avance aussi celle de la boucle (``loop.time`` suit
+    freezegun) : le minuteur du collecteur (minutes 2, 17, 32, 47) est échu. Si le test ne le
+    fait pas sonner lui-même, il sonne au dernier tour de boucle du test et son passage, en
+    tâche de fond, ne commence que pendant le démontage des fixtures : horloge réelle revenue
+    (neuf mois « à rattraper »), fausses statistiques de 5 min retirées, donc de vraies requêtes
+    au recorder pendant qu'il se ferme. Selon l'instant, cela passait, ou donnait « no such
+    table: statistics_meta » (SQLite en mémoire rouverte vide), « cannot schedule new futures
+    after shutdown » ou « Task was destroyed but it is pending » : l'instabilité de la CI du
+    10/10/2026.
+    """
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    passage = entree.runtime_data.collecteur._passage
+    assert passage is not None and passage.done() and passage.result() == 0  # déjà à jour
+
+
 def corps(tmp_path: Path, r: dict) -> tuple[str, list[str]]:
     texte = lire_zip(tmp_path / "sbg_energy_export" / "exports" / r["fichier"])
     return texte, [l for l in texte.splitlines() if not l.startswith("#")]
@@ -148,6 +167,7 @@ async def test_installation_un_an_horaire_et_dix_jours_au_quart(
         # puis en continu
         freezer.move_to(MAINTENANT + timedelta(hours=1))
         assert await entree.runtime_data.collecteur.async_rattraper() == 4
+        await passage_du_minuteur_termine(hass, entree)
         r = await hass.services.async_call(DOMAIN, "exporter", {"pas": 15}, blocking=True, return_response=True)
         _, c = corps(tmp_path, r)
         assert c[-1].startswith("2026-01-06T12:45:00Z,mesure_15min,0.25,0.05,0.1,,,0.3,")
@@ -172,6 +192,7 @@ async def test_appareil_ajoute_rattrape_appareil_retire_garde(
         await hass.async_block_till_done(wait_background_tasks=True)
         freezer.move_to(MAINTENANT + timedelta(hours=1))
         await entree.runtime_data.collecteur.async_rattraper()
+        await passage_du_minuteur_termine(hass, entree)
     lu = stockage.lire(mesures, 15, ["sensor.frigo_cave", "sensor.borne_garage"], debut, fin)
     frigo, borne = lu["sensor.frigo_cave"], lu["sensor.borne_garage"]
     # frigo : rattrapé depuis la purge des statistiques de 5 min, puis en continu

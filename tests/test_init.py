@@ -6,13 +6,16 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import html
 import io
+import logging
 from pathlib import Path
 import re
+import sqlite3
 from unittest.mock import patch
 import zipfile
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.energy.data import async_get_manager
+from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticMeanType
 from homeassistant.components.recorder.statistics import (
     async_import_statistics,
@@ -24,7 +27,9 @@ from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from pytest_homeassistant_custom_component.components.recorder.common import async_wait_recording_done
+from sqlalchemy.exc import OperationalError
 
+from custom_components.sbg_energy_export.collecteur import recorder_pret
 from custom_components.sbg_energy_export.const import DOMAIN
 from tests import lire_zip
 
@@ -247,3 +252,136 @@ async def test_plus_de_passage_a_l_arret_de_home_assistant(
         async_fire_time_changed(hass, t)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert appels == []
+
+
+PATCH_STATS = "custom_components.sbg_energy_export.collecteur.statistics_during_period"
+JOURNAL = "custom_components.sbg_energy_export.collecteur"
+ONZE_HEURES = int(datetime(2026, 1, 6, 11, tzinfo=UTC).timestamp())
+
+
+def base_fermee(hass, debut, fin, ids, periode, unites, types):
+    """Ce que rend le recorder interrogé pendant sa fermeture (journal de la CI du 10/10/2026)."""
+    raise OperationalError("SELECT … FROM statistics_meta", {}, sqlite3.OperationalError("no such table: statistics_meta"))
+
+
+def faux_5min_suite(hass, debut, fin, ids, periode, unites, types):
+    """Comme ``faux_5min``, avec l'heure suivante compilée (11:00 → 12:00)."""
+    if periode != "5minute":
+        return vrai_statistics_during_period(hass, debut, fin, ids, periode, unites, types)
+    sortie = {}
+    for stat in ids:
+        e5 = PAR_HEURE[stat] / 12
+        lignes = []
+        t = QUARTS_MESURES - timedelta(minutes=5)
+        while t < QUARTS_MESURES + timedelta(hours=2):
+            if debut <= t < fin:
+                k = int((t - QUARTS_MESURES).total_seconds() // 300) + 1
+                lignes.append({"start": t.timestamp(), "end": t.timestamp() + 300, "sum": 1000 + e5 * k})
+            t += timedelta(minutes=5)
+        if lignes:
+            sortie[stat] = lignes
+    return sortie
+
+
+async def tic(hass: HomeAssistant, freezer: FrozenDateTimeFactory, minute: int) -> asyncio.Task[int]:
+    """Fait sonner le minuteur du collecteur et attend la fin du passage qu'il lance."""
+    t = MAINTENANT.replace(minute=minute, second=30)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    tache = hass.config_entries.async_loaded_entries(DOMAIN)[0].runtime_data.collecteur._passage
+    assert tache is not None and tache.done()
+    return tache
+
+
+async def test_erreur_de_base_au_passage_consignee_puis_rattrapee(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Le recorder échoue pendant un passage (ici comme dans la CI : « no such table ») : une
+    ligne d'avertissement, pas d'exception perdue dans la tâche de fond, rien de marqué comme
+    enregistré, et le passage suivant rattrape (avant : « Task exception was never retrieved »)."""
+    collecteur = installe.runtime_data.collecteur
+    assert collecteur.prochain == ONZE_HEURES
+    etat = await collecteur._store.async_load()
+    assert etat is not None and etat["prochain"] == ONZE_HEURES
+    with patch(PATCH_STATS, base_fermee), caplog.at_level(logging.WARNING, logger=JOURNAL):
+        tache = await tic(hass, freezer, 17)
+    assert tache.exception() is None and tache.result() == 0
+    lignes = [r for r in caplog.records if r.name == JOURNAL]
+    assert [r.levelno for r in lignes] == [logging.WARNING]
+    assert "no such table: statistics_meta" in lignes[0].getMessage()
+    assert "nouvel essai" in lignes[0].getMessage() and lignes[0].exc_info is None
+    assert collecteur.prochain == ONZE_HEURES and await collecteur._store.async_load() == etat
+    lu = await collecteur.async_lire(["sensor.import"], ONZE_HEURES, ONZE_HEURES + 3600)
+    assert lu["sensor.import"] == {}
+    # le recorder répond de nouveau : l'heure manquée est enregistrée au passage suivant
+    with patch(PATCH_STATS, faux_5min_suite):
+        tache = await tic(hass, freezer, 32)
+    assert tache.result() == 4 and collecteur.prochain == ONZE_HEURES + 3600
+    lu = await collecteur.async_lire(["sensor.import"], ONZE_HEURES, ONZE_HEURES + 3600)
+    assert lu["sensor.import"] == {ONZE_HEURES + k * 900: pytest.approx(0.25) for k in range(4)}
+
+
+async def test_erreur_inattendue_au_passage_consignee_avec_sa_trace(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Une erreur qui n'est pas celle d'un recorder indisponible est consignée en erreur, avec
+    sa trace : elle n'est ni perdue ni maquillée en « statistiques indisponibles »."""
+    collecteur = installe.runtime_data.collecteur
+
+    def casse(*_args):
+        raise ValueError("inattendu")
+
+    with patch(PATCH_STATS, casse), caplog.at_level(logging.WARNING, logger=JOURNAL):
+        tache = await tic(hass, freezer, 17)
+    assert tache.exception() is None and tache.result() == 0
+    lignes = [r for r in caplog.records if r.name == JOURNAL]
+    assert [r.levelno for r in lignes] == [logging.ERROR]
+    assert lignes[0].exc_info is not None and lignes[0].exc_info[0] is ValueError
+    assert collecteur.prochain == ONZE_HEURES
+
+
+@pytest.mark.parametrize("cas", ["base_pas_prete", "demarrage_echoue", "recorder_arrete"])
+async def test_pas_de_passage_sans_recorder(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory, cas: str
+) -> None:
+    """Recorder pas encore prêt, jamais démarré ou arrêté : le passage ne lui demande rien et ne
+    marque rien comme enregistré (avant, recorder arrêté : « RuntimeError: cannot schedule new
+    futures after shutdown » ; base pas prête : requête envoyée quand même)."""
+    collecteur = installe.runtime_data.collecteur
+    instance = get_instance(hass)
+    assert recorder_pret(hass)
+    appels: list[str] = []
+
+    def compte(hass, debut, fin, ids, periode, unites, types):
+        appels.append(periode)
+        return {}
+
+    pret: asyncio.Future[bool] = hass.loop.create_future()
+    if cas == "demarrage_echoue":
+        pret.set_result(False)
+    if cas == "recorder_arrete":
+        await instance._async_shutdown(None)  # ce que fait Home Assistant à son arrêt
+        pret = instance.async_db_ready
+    with patch(PATCH_STATS, compte), patch.object(instance, "async_db_ready", pret):
+        assert not recorder_pret(hass)
+        tache = await tic(hass, freezer, 17)
+        assert tache.exception() is None and tache.result() == 0
+        assert await collecteur.async_rattraper() == 0  # export, envoi : même garde
+    pret.cancel()
+    assert appels == []
+    assert collecteur.prochain == ONZE_HEURES
+
+
+async def test_erreur_de_base_au_demarrage_consignee(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Le rattrapage lancé au chargement de l'entrée est protégé comme le passage périodique."""
+    freezer.move_to(MAINTENANT.replace(minute=40))
+    with patch(PATCH_STATS, base_fermee), caplog.at_level(logging.WARNING, logger=JOURNAL):
+        assert await hass.config_entries.async_reload(installe.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    lignes = [r for r in caplog.records if r.name == JOURNAL]
+    assert [r.levelno for r in lignes] == [logging.WARNING]
+    assert "no such table: statistics_meta" in lignes[0].getMessage()
+    assert installe.runtime_data.collecteur.prochain == ONZE_HEURES
