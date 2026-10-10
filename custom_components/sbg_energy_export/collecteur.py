@@ -271,6 +271,24 @@ class Collecteur:
         debut = min(min(par_t) for par_t in retenues.values())
         self.premier = debut if self.premier is None else min(self.premier, debut)
 
+    def _recorder_disponible(self) -> bool:
+        """Vrai si une requête peut partir. Vérifié avant chacune : un rattrapage de plusieurs
+        jours fait une requête par jour, et le recorder peut s'arrêter entre deux."""
+        if self.hass.is_stopping or not recorder_pret(self.hass):
+            # Recorder pas encore prêt, arrêté, ou Home Assistant qui s'arrête : rien n'est
+            # demandé (ni marqué comme traité), le passage suivant rattrape.
+            _LOGGER.debug("Recorder indisponible : passage reporté")
+            return False
+        return True
+
+    def _interrompu(self, traites: int) -> int:
+        """Passage arrêté en cours de route : ce qui est écrit l'est (``prochain`` enregistré
+        tranche par tranche), le reste attend le passage suivant."""
+        if traites:
+            for rappel in list(self._ecouteurs):
+                rappel()
+        return traites
+
     async def async_rattraper(self, maintenant: float | None = None) -> int:
         """Traite toutes les périodes complètes pas encore enregistrées.
 
@@ -281,10 +299,7 @@ class Collecteur:
         même durée.
         """
         async with self._verrou:
-            if self.hass.is_stopping or not recorder_pret(self.hass):
-                # Recorder pas encore prêt, arrêté, ou Home Assistant qui s'arrête : rien n'est
-                # demandé (ni marqué comme traité), le passage suivant rattrape.
-                _LOGGER.debug("Recorder indisponible : passage reporté")
+            if not self._recorder_disponible():
                 return 0
             prefs = (await async_get_manager(self.hass)).data
             ids = statistiques_suivies(prefs, self.options)
@@ -311,6 +326,8 @@ class Collecteur:
 
             traites = 0
             while self.prochain < fin:
+                if not self._recorder_disponible():
+                    return self._interrompu(traites)
                 bout = min(fin, self.prochain + TRANCHE_S)
                 cinq, quarts = await self._async_periodes(ids, self.prochain, bout)
                 if bout == fin and maintenant - bout < 3600:
@@ -328,6 +345,10 @@ class Collecteur:
             # Statistiques nouvelles : rattrapées tant que leurs 5 min existent.
             t = plus_ancien
             while nouvelles and t < depart:
+                if not self._recorder_disponible():
+                    # ``suivies`` n'est pas mis à jour : ces statistiques restent « nouvelles »
+                    # et sont rattrapées en entier au passage suivant.
+                    return self._interrompu(traites)
                 bout = min(depart, t + TRANCHE_S)
                 cinq, quarts = await self._async_periodes(nouvelles, t, bout)
                 await self._async_enregistrer(cinq, quarts, bout)
