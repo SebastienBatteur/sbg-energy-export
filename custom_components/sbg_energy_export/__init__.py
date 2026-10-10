@@ -189,7 +189,7 @@ async def async_setup_entry(hass: HomeAssistant, entree: SbgConfigEntry) -> bool
         await envoi.async_oublier_deconnectee(hass, entree)
     entree.async_on_unload(collecteur.async_arreter)
     entree.async_on_unload(entree.add_update_listener(_async_options_modifiees))
-    entree.async_create_background_task(hass, collecteur.async_rattraper(), f"{DOMAIN}_rattrapage")
+    entree.async_create_background_task(hass, collecteur.async_passage(), f"{DOMAIN}_rattrapage")
     await hass.config_entries.async_forward_entry_setups(entree, PLATFORMS)
     _programmer_envoi(hass, entree)
     return True

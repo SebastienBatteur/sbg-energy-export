@@ -45,6 +45,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_utc_time_change
 from homeassistant.helpers.storage import Store
+from sqlalchemy.exc import SQLAlchemyError
 
 from . import stockage
 from .const import (
@@ -95,6 +96,21 @@ def statistiques_suivies(prefs: Mapping[str, Any] | None, options: Mapping[str, 
 def a_des_sources(prefs: Mapping[str, Any] | None) -> bool:
     """Le tableau Énergie a au moins une source réseau, solaire ou batterie."""
     return bool(prefs) and any(depuis_preferences(prefs, [], {}).roles.get(r) for r in ROLES)  # type: ignore[arg-type]
+
+
+def recorder_pret(hass: HomeAssistant) -> bool:
+    """Le recorder peut répondre : base ouverte et fil du recorder en marche.
+
+    ``async_db_ready`` est résolu à vrai une fois la base ouverte et les migrations bloquantes
+    terminées (c'est aussi ce qu'attend la dépendance ``recorder`` du manifest avant de charger
+    l'intégration), à faux si le recorder n'a pas pu démarrer. ``is_running`` retombe à faux dès
+    que le fil du recorder s'arrête, avant qu'il ferme la base : passé ce moment, une requête
+    échoue (« cannot schedule new futures after shutdown ») ou, pire, n'échoue pas (base SQLite
+    en mémoire rouverte vide, « no such table: statistics_meta »).
+    """
+    instance = get_instance(hass)
+    pret = instance.async_db_ready
+    return bool(instance.is_running and pret.done() and not pret.cancelled() and pret.result())
 
 
 async def async_statistiques(
@@ -199,8 +215,33 @@ class Collecteur:
         if self.hass.is_stopping or (self._passage and not self._passage.done()):
             return
         self._passage = self.hass.async_create_background_task(
-            self.async_rattraper(), f"{DOMAIN}_passage", eager_start=True
+            self.async_passage(), f"{DOMAIN}_passage", eager_start=True
         )
+
+    async def async_passage(self) -> int:
+        """Un passage en tâche de fond (démarrage, minuteur) : une erreur ne s'en échappe pas.
+
+        L'exception d'une tâche de fond n'est lue par personne : elle ne ressortirait qu'à la
+        destruction de la tâche (« Task exception was never retrieved »), un quart d'heure plus
+        tard et sans dire ce qu'il advient des mesures. Rien n'est perdu : ``prochain`` et
+        ``suivies`` n'avancent qu'après l'écriture des périodes lues, le passage suivant reprend
+        donc là où celui-ci s'est arrêté.
+        """
+        try:
+            return await self.async_rattraper()
+        except (SQLAlchemyError, RuntimeError) as erreur:
+            # RuntimeError : fil d'exécution du recorder fermé, ou connexion à la base pas
+            # (ou plus) établie.
+            _LOGGER.warning(
+                "Statistiques de Home Assistant indisponibles (%s : %s) : mesures fines non "
+                "enregistrées à ce passage, nouvel essai au suivant, rien n'est perdu",
+                type(erreur).__name__, str(erreur).splitlines()[0] if str(erreur) else "",
+            )
+        except Exception:  # noqa: BLE001 - tâche de fond : tout est consigné, le passage suivant réessaie
+            _LOGGER.exception(
+                "Enregistrement des mesures fines interrompu ; nouvel essai au passage suivant"
+            )
+        return 0
 
     async def _async_sauver(self) -> None:
         await self._store.async_save({
@@ -240,6 +281,11 @@ class Collecteur:
         même durée.
         """
         async with self._verrou:
+            if self.hass.is_stopping or not recorder_pret(self.hass):
+                # Recorder pas encore prêt, arrêté, ou Home Assistant qui s'arrête : rien n'est
+                # demandé (ni marqué comme traité), le passage suivant rattrape.
+                _LOGGER.debug("Recorder indisponible : passage reporté")
+                return 0
             prefs = (await async_get_manager(self.hass)).data
             ids = statistiques_suivies(prefs, self.options)
             if not ids:
