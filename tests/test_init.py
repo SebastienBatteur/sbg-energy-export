@@ -426,3 +426,51 @@ async def test_recorder_arrete_entre_deux_tranches_statistique_nouvelle_pas_marq
     assert "sensor.frigo_cave" in collecteur.suivies
     lu = await collecteur.async_lire(["sensor.frigo_cave"], ONZE_HEURES - 3600, ONZE_HEURES)
     assert lu["sensor.frigo_cave"] == {ONZE_HEURES - 3600 + k * 900: pytest.approx(0.0125) for k in range(4)}
+
+
+async def test_runtimeerror_hors_recorder_consignee_avec_sa_trace(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Une RuntimeError qui ne vient pas de la requête au recorder (ici l'écriture du stockage)
+    n'est pas prise pour « statistiques indisponibles » : erreur, avec sa trace."""
+    collecteur = installe.runtime_data.collecteur
+
+    def disque(*_args):
+        raise RuntimeError("stockage en panne")
+
+    with (
+        patch(PATCH_STATS, faux_5min_suite),
+        patch("custom_components.sbg_energy_export.collecteur.stockage.enregistrer", disque),
+        caplog.at_level(logging.WARNING, logger=JOURNAL),
+    ):
+        tache = await tic(hass, freezer, 17)
+    assert tache.exception() is None and tache.result() == 0
+    lignes = [r for r in caplog.records if r.name == JOURNAL]
+    assert [r.levelno for r in lignes] == [logging.ERROR]
+    assert lignes[0].exc_info is not None and lignes[0].exc_info[0] is RuntimeError
+    assert "indisponibles" not in lignes[0].getMessage()
+    assert collecteur.prochain == ONZE_HEURES  # rien d'écrit, rien de marqué
+
+
+async def test_executeur_du_recorder_ferme_pendant_le_passage_une_ligne(
+    installe, hass: HomeAssistant, freezer: FrozenDateTimeFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Le recorder se ferme juste après la garde : la requête est refusée par son fil
+    d'exécution. Avertissement d'une ligne, sans trace, et le passage suivant rattrape."""
+    collecteur = installe.runtime_data.collecteur
+
+    def ferme(*_args):
+        raise RuntimeError("cannot schedule new futures after shutdown")
+
+    with (
+        patch.object(get_instance(hass), "async_add_executor_job", ferme),
+        caplog.at_level(logging.WARNING, logger=JOURNAL),
+    ):
+        tache = await tic(hass, freezer, 17)
+    assert tache.exception() is None and tache.result() == 0
+    lignes = [r for r in caplog.records if r.name == JOURNAL]
+    assert [r.levelno for r in lignes] == [logging.WARNING]
+    assert lignes[0].exc_info is None
+    message = lignes[0].getMessage()
+    assert "indisponibles (RuntimeError : cannot schedule new futures after shutdown)" in message
+    assert collecteur.prochain == ONZE_HEURES

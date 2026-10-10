@@ -98,6 +98,10 @@ def a_des_sources(prefs: Mapping[str, Any] | None) -> bool:
     return bool(prefs) and any(depuis_preferences(prefs, [], {}).roles.get(r) for r in ROLES)  # type: ignore[arg-type]
 
 
+class RecorderIndisponible(Exception):
+    """La requête de statistiques n'a pas abouti : recorder arrêté ou base en erreur."""
+
+
 def recorder_pret(hass: HomeAssistant) -> bool:
     """Le recorder peut répondre : base ouverte et fil du recorder en marche.
 
@@ -229,13 +233,13 @@ class Collecteur:
         """
         try:
             return await self.async_rattraper()
-        except (SQLAlchemyError, RuntimeError) as erreur:
-            # RuntimeError : fil d'exécution du recorder fermé, ou connexion à la base pas
-            # (ou plus) établie.
+        except RecorderIndisponible as erreur:
+            # Seulement l'échec de la requête au recorder (traduit dans ``_async_periodes``) :
+            # une RuntimeError venue d'ailleurs (stockage, état, écouteur) est inattendue et
+            # garde sa trace, ci-dessous.
             _LOGGER.warning(
-                "Statistiques de Home Assistant indisponibles (%s : %s) : mesures fines non "
-                "enregistrées à ce passage, nouvel essai au suivant, rien n'est perdu",
-                type(erreur).__name__, str(erreur).splitlines()[0] if str(erreur) else "",
+                "Statistiques de Home Assistant indisponibles (%s) : mesures fines non "
+                "enregistrées à ce passage, nouvel essai au suivant, rien n'est perdu", erreur,
             )
         except Exception:  # noqa: BLE001 - tâche de fond : tout est consigné, le passage suivant réessaie
             _LOGGER.exception(
@@ -253,7 +257,13 @@ class Collecteur:
         self, ids: set[str], debut: int, fin: int
     ) -> tuple[dict[str, dict[int, float]], dict[str, dict[int, float]]]:
         """Énergies par période de 5 min et par quart d'heure complet, de ``debut`` à ``fin``."""
-        brut = await async_statistiques(self.hass, ids, debut - 300, fin, "5minute")
+        try:
+            brut = await async_statistiques(self.hass, ids, debut - 300, fin, "5minute")
+        except (SQLAlchemyError, RuntimeError) as erreur:
+            # RuntimeError : fil d'exécution du recorder fermé (« cannot schedule new futures
+            # after shutdown »), ou connexion à la base pas (ou plus) établie.
+            texte = str(erreur).splitlines()[0] if str(erreur) else ""
+            raise RecorderIndisponible(f"{type(erreur).__name__} : {texte}") from erreur
         cinq = {s: {t: v for t, v in par_t.items() if debut <= t < fin}
                 for s, par_t in variations_par_cinq(brut).items()}
         quarts = {s: regrouper(par_t, 300, QUART) for s, par_t in cinq.items()}
