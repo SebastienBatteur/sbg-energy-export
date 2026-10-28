@@ -3,9 +3,17 @@
 # chaque nuit (les règles de hassfest et de HACS évoluent sans que le dépôt change).
 name: Validation
 
+# Dépôt public : ces minutes ne sont pas décomptées du quota du compte. Réglages du 28/10/2026
+# quand même (sobriété) : rien pour docs/ seul (les *.md restent validés : HACS lit le README), annulation de l'exécution devenue
+# inutile sur une branche ou une PR, timeouts. Les pushs de toutes les branches restent testés
+# (gratuit ici, et une branche sans PR garde sa CI).
 on:
   push:
+    paths-ignore:
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "docs/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -13,17 +21,25 @@ on:
 permissions:
   contents: read
 
+# Sur main, un groupe par exécution (run_id) : GitHub ne garde qu'une exécution en attente par
+# groupe, et un push ne doit pas remplacer la validation nocturne en attente.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   hassfest:
     name: hassfest
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
     name: HACS
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: hacs/action@main
         with:
